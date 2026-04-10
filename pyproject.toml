@@ -1,0 +1,27 @@
+[project]
+name = "deforestation-dengue-modeling"
+version = "0.1.0"
+description = "Pipeline para reprodução de estudo sobre impactos do desmatamento na incidência de dengue na Amazônia"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "geopandas>=0.14",
+    "geobr>=0.2",
+    "sidrapy>=0.1",
+    "requests>=2.31",
+    "pandas>=2.0",
+    "numpy>=1.24",
+    "matplotlib>=3.7",
+    "esda>=2.5",
+    "mgwr>=2.2",
+    "statsmodels>=0.14",
+    "scipy>=1.11",
+    "seaborn>=0.13",
+    "mosqlient>=2.0.3",
+    "dotenv>=0.9.9",
+    "rasterstats>=0.20.0",
+    "rasterio>=1.4.4",
+    "spreg>=1.8.5",
+    "libpysal>=4.14.1",
+    "scikit-learn>=1.8.0",
+]
