@@ -1,14 +1,15 @@
-import pandas as pd
-import geopandas as gpd
-import numpy as np
-import libpysal
 import json
-from spreg import OLS
+from pathlib import Path
+
+import geopandas as gpd
+import libpysal
+import numpy as np
+import pandas as pd
+import statsmodels.api as sm
 from mgwr.gwr import GWR
 from mgwr.sel_bw import Sel_BW
+from spreg import OLS
 from statsmodels.stats.outliers_influence import variance_inflation_factor
-import statsmodels.api as sm
-from pathlib import Path
 
 __DIR, RESULTS_DIR = (
     Path(__file__).parent,

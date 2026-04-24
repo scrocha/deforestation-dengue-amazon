@@ -38,7 +38,8 @@ def process_dengue():
 
 def process_deforestation(muni_gdf):
     prodes = gpd.read_file(
-        RAW_DIR / "prodes_amazonia_nb.gpkg", layer="yearly_deforestation_biome"
+        RAW_DIR / "prodes_biome_amazonia_v20260330.gpkg",
+        layer="yearly_deforestation_biome"
     )
     prodes = prodes[prodes["year"].isin(TARGET_YEARS)].to_crs(muni_gdf.crs)
     joined = gpd.sjoin(
@@ -62,7 +63,8 @@ def process_road_distance(muni_gdf):
     roads = roads.to_crs("EPSG:5880")
 
     prodes = gpd.read_file(
-        RAW_DIR / "prodes_amazonia_nb.gpkg", layer="yearly_deforestation_biome"
+        RAW_DIR / "prodes_biome_amazonia_v20260330.gpkg",
+        layer="yearly_deforestation_biome"
     )
     def_recent = prodes[prodes["year"].isin(TARGET_YEARS)].to_crs("EPSG:5880")
     def_recent['centroid'] = def_recent.geometry.centroid
@@ -86,6 +88,7 @@ def process_road_distance(muni_gdf):
 
 def process_socioeconomics():
     pib = pd.read_csv(RAW_DIR / "pib.csv")
+    pib['Valor'] = pd.to_numeric(pib['Valor'], errors='coerce')
     pib_avg = (
         pib[pib['Ano'].isin(TARGET_YEARS)]
         .groupby("Município (Código)")['Valor']
@@ -95,6 +98,7 @@ def process_socioeconomics():
     )
 
     pop_legacy = pd.read_csv(RAW_DIR / "populacao_situacao.csv")
+    pop_legacy['Valor'] = pd.to_numeric(pop_legacy['Valor'], errors='coerce')
     pop_avg = (
         pop_legacy[
             pop_legacy['Situação do domicílio'].isin(['Urbana', 'Rural'])
@@ -107,6 +111,7 @@ def process_socioeconomics():
     )
 
     pop_est = pd.read_csv(RAW_DIR / "populacao_estimativa.csv")
+    pop_est['Valor'] = pd.to_numeric(pop_est['Valor'], errors='coerce')
     pop_est_avg = (
         pop_est[pop_est['Ano'].isin(TARGET_YEARS)]
         .groupby("Município (Código)")['Valor']
@@ -124,6 +129,7 @@ def process_socioeconomics():
 
 def process_crops():
     crop = pd.read_csv(RAW_DIR / "lavoura_temporaria.csv")
+    crop['Valor'] = pd.to_numeric(crop['Valor'], errors='coerce')
     crop_avg = crop.groupby("Município (Código)")['Valor'].mean().reset_index()
     return (
         crop_avg.assign(avg_crop_area=crop_avg.Valor / 100.0)

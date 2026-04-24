@@ -1,6 +1,7 @@
-import pandas as pd
 import json
 from pathlib import Path
+
+import pandas as pd
 
 __DIR = Path(__file__).parent
 RESULTS_DIR = __DIR.parent / "data" / "results"
@@ -9,7 +10,7 @@ RESULTS_DIR = __DIR.parent / "data" / "results"
 def load_json(name):
     path = RESULTS_DIR / name
     if path.exists():
-        with open(path, 'r') as f:
+        with open(path, "r") as f:
             return json.load(f)
     return {}
 
@@ -24,6 +25,7 @@ def main():
     gwr_base = load_json("gwr_metrics.json")
     trans_metrics = load_json("transformed_metrics.json")
     paper_metrics = load_json("paper_metrics.json")
+    hier_metrics_exp = load_json("hierarchical_metrics_expanded.json")
 
     if moran_metrics:
         print("=== DIAGNÓSTICO ESPACIAL ===")
@@ -33,54 +35,86 @@ def main():
         )
 
     rows = []
-    if ols_base and gwr_base:
-        rows.append(
-            {
-                "Iteração": "1. Baseline",
-                "Variáveis": 9,
-                "Transformações": "Nenhuma (Raw)",
-                "OLS R²": round(ols_base.get("ols_r2", 0), 3),
-                "OLS AIC": round(ols_base.get("ols_aic", 0), 1),
-                "GWR R²": round(gwr_base.get("gwr_r2", 0), 3),
-                "GWR AIC": round(gwr_base.get("gwr_aic", 0), 1),
-            }
-        )
-    if trans_metrics:
-        rows.append(
-            {
-                "Iteração": "2. Transformado Otimizado",
-                "Variáveis": 9,
-                "Transformações": "Log1p(y) e Log1p/Norm(X)",
-                "OLS R²": round(trans_metrics.get("ols_trans_r2", 0), 3),
-                "OLS AIC": round(trans_metrics.get("ols_trans_aic", 0), 1),
-                "GWR R²": round(trans_metrics.get("gwr_trans_r2", 0), 3),
-                "GWR AIC": round(trans_metrics.get("gwr_trans_aic", 0), 1),
-            }
-        )
-    if paper_metrics:
-        rows.append(
-            {
-                "Iteração": "3. Reprodução Paper (Original)",
-                "Variáveis": 4,
-                "Transformações": "Nenhuma (Escala Raw)",
-                "OLS R²": round(paper_metrics.get("ols_raw_paper_r2", 0), 3),
-                "OLS AIC": round(paper_metrics.get("ols_raw_paper_aic", 0), 1),
-                "GWR R²": round(paper_metrics.get("gwr_raw_paper_r2", 0), 3),
-                "GWR AIC": round(paper_metrics.get("gwr_raw_paper_aic", 0), 1),
-            }
-        )
-        if "ols_raw_paper_r2" in paper_metrics:
-            rows.append(
-                {
-                    "Iteração": "4. Reprodução Paper (Transf)",
-                    "Variáveis": 4,
-                    "Transformações": "Log1p(y) e Z-Score(X)",
-                    "OLS R²": round(paper_metrics.get("ols_paper_r2", 0), 3),
-                    "OLS AIC": round(paper_metrics.get("ols_paper_aic", 0), 1),
-                    "GWR R²": round(paper_metrics.get("gwr_paper_r2", 0), 3),
-                    "GWR AIC": round(paper_metrics.get("gwr_paper_aic", 0), 1),
-                }
+
+    # Mapeamento para facilitar loop do resumo
+    scenarios_meta = [
+        (
+            "1. Baseline (Raw)",
+            9,
+            "raw_9",
+            "ols_metrics.json",
+            "gwr_metrics.json",
+        ),
+        (
+            "2. Transformado Otimizado",
+            9,
+            "trans_9",
+            "transformed_metrics.json",
+            "transformed_metrics.json",
+        ),
+        (
+            "3. Paper (Raw)",
+            4,
+            "raw_4",
+            "paper_metrics.json",
+            "paper_metrics.json",
+        ),
+        (
+            "4. Paper (Transformado)",
+            4,
+            "trans_4",
+            "paper_metrics.json",
+            "paper_metrics.json",
+        ),
+    ]
+
+    for label, vars_count, h_key, ols_file, gwr_file in scenarios_meta:
+        ols_m = load_json(ols_file)
+        gwr_m = load_json(gwr_file)
+        hier_m = hier_metrics_exp.get(h_key, {})
+
+        # Lógica para extrair as chaves corretas dos arquivos OLS/GWR antigos
+        if label == "1. Baseline (Raw)":
+            ols_r2, ols_aic = ols_m.get("ols_r2"), ols_m.get("ols_aic")
+            gwr_r2, gwr_aic = gwr_m.get("gwr_r2"), gwr_m.get("gwr_aic")
+        elif label == "2. Transformado Otimizado":
+            ols_r2, ols_aic = (
+                ols_m.get("ols_trans_r2"),
+                ols_m.get("ols_trans_aic"),
             )
+            gwr_r2, gwr_aic = (
+                gwr_m.get("gwr_trans_r2"),
+                gwr_m.get("gwr_trans_aic"),
+            )
+        elif label == "3. Paper (Raw)":
+            ols_r2, ols_aic = (
+                ols_m.get("ols_raw_paper_r2"),
+                ols_m.get("ols_raw_paper_aic"),
+            )
+            gwr_r2, gwr_aic = (
+                gwr_m.get("gwr_raw_paper_r2"),
+                gwr_m.get("gwr_raw_paper_aic"),
+            )
+        else:  # Paper Transformado
+            ols_r2, ols_aic = (
+                ols_m.get("ols_paper_r2"),
+                ols_m.get("ols_paper_aic"),
+            )
+            gwr_r2, gwr_aic = (
+                gwr_m.get("gwr_paper_r2"),
+                gwr_m.get("gwr_paper_aic"),
+            )
+
+        rows.append(
+            {
+                "Iteração": label,
+                "Vars": vars_count,
+                "OLS R² (AIC)": f"{round(ols_r2, 3) if ols_r2 else 0} ({round(ols_aic, 1) if ols_aic else '-'})",
+                "Hier (Muni) R² (AIC)": f"{round(hier_m.get('muni_r2', 0), 3)} ({round(hier_m.get('muni_aic', 0), 1)})",
+                "Hier (Est.) R² (AIC)": f"{round(hier_m.get('state_r2', 0), 3)} ({round(hier_m.get('state_aic', 0), 1)})",
+                "GWR R² (AIC)": f"{round(gwr_r2, 3) if gwr_r2 else 0} ({round(gwr_aic, 1) if gwr_aic else '-'})",
+            }
+        )
 
     df_models = pd.DataFrame(rows)
     print(df_models.to_string(index=False))

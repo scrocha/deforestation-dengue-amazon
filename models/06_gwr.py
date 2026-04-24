@@ -1,10 +1,10 @@
-import pandas as pd
+import json
+from pathlib import Path
+
 import geopandas as gpd
 import numpy as np
 from mgwr.gwr import GWR
 from mgwr.sel_bw import Sel_BW
-from pathlib import Path
-import json
 from scipy.stats import norm
 
 __DIR = Path(__file__).parent
@@ -35,7 +35,8 @@ def main():
         
     gdf.to_file(RESULTS_DIR / "results_geo.gpkg", driver="GPKG")
     metrics = {"gwr_r2": float(results.R2), "gwr_aic": float(results.aic), "gwr_bw": float(bw)}
-    with open(RESULTS_DIR / "gwr_metrics.json", "w") as f: json.dump(metrics, f, indent=4)
+    with open(RESULTS_DIR / "gwr_metrics.json", "w") as f:
+        json.dump(metrics, f, indent=4)
 
 if __name__ == "__main__":
     main()
