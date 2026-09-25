@@ -23,7 +23,7 @@ def process_dengue():
     df = pd.read_csv(RAW_DIR / "dengue.csv")
     df['ano'] = pd.to_datetime(df['data_iniSE']).dt.year
     filtered = df[df['ano'].isin(TARGET_YEARS)]
-    return (
+    dengue = (
         filtered.groupby("municipio_geocodigo")['p_inc100k']
         .mean()
         .reset_index()
@@ -34,11 +34,12 @@ def process_dengue():
             }
         )
     )
+    return dengue
 
 
 def process_deforestation(muni_gdf):
     prodes = gpd.read_file(
-        RAW_DIR / "prodes_biome_amazonia_v20260330.gpkg",
+        RAW_DIR / "prodes_biome_amazonia_v20260717.gpkg",
         layer="yearly_deforestation_biome"
     )
     prodes = prodes[prodes["year"].isin(TARGET_YEARS)].to_crs(muni_gdf.crs)
@@ -63,7 +64,7 @@ def process_road_distance(muni_gdf):
     roads = roads.to_crs("EPSG:5880")
 
     prodes = gpd.read_file(
-        RAW_DIR / "prodes_biome_amazonia_v20260330.gpkg",
+        RAW_DIR / "prodes_biome_amazonia_v20260717.gpkg",
         layer="yearly_deforestation_biome"
     )
     def_recent = prodes[prodes["year"].isin(TARGET_YEARS)].to_crs("EPSG:5880")
