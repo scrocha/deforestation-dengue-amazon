@@ -37,12 +37,8 @@ def process_dengue():
     return dengue
 
 
-def process_deforestation(muni_gdf):
-    prodes = gpd.read_file(
-        RAW_DIR / "prodes_biome_amazonia_v20260717.gpkg",
-        layer="yearly_deforestation_biome"
-    )
-    prodes = prodes[prodes["year"].isin(TARGET_YEARS)].to_crs(muni_gdf.crs)
+def process_deforestation(muni_gdf, prodes):
+    prodes = prodes.to_crs(muni_gdf.crs)
     joined = gpd.sjoin(
         prodes, muni_gdf[['code_muni', 'geometry']], predicate='within'
     )
@@ -57,17 +53,13 @@ def process_deforestation(muni_gdf):
     )
 
 
-def process_road_distance(muni_gdf):
+def process_road_distance(muni_gdf, prodes):
     roads = gpd.read_file(RAW_DIR / "2014" / "rodovia_2014.shp")
     if roads.crs is None:
         roads = roads.set_crs("EPSG:4674")
     roads = roads.to_crs("EPSG:5880")
 
-    prodes = gpd.read_file(
-        RAW_DIR / "prodes_biome_amazonia_v20260717.gpkg",
-        layer="yearly_deforestation_biome"
-    )
-    def_recent = prodes[prodes["year"].isin(TARGET_YEARS)].to_crs("EPSG:5880")
+    def_recent = prodes.to_crs("EPSG:5880")
     def_recent['centroid'] = def_recent.geometry.centroid
 
     joined = gpd.sjoin(
@@ -76,9 +68,7 @@ def process_road_distance(muni_gdf):
         predicate='within',
     )
     road_union = roads.geometry.union_all()
-    joined['dist'] = joined['centroid'].apply(
-        lambda x: x.distance(road_union) / 1000
-    )
+    joined['dist'] = joined['centroid'].distance(road_union) / 1000
     return (
         joined.groupby('code_muni')['dist']
         .mean()
@@ -185,10 +175,15 @@ def process_precipitation(muni_gdf):
 
 def main():
     muni_gdf = load_base_municipalities()
+    prodes = gpd.read_file(
+        RAW_DIR / "prodes_biome_amazonia_v20260717.gpkg",
+        layer="yearly_deforestation_biome",
+    )
+    prodes = prodes[prodes["year"].isin(TARGET_YEARS)]
     data = (
         muni_gdf.merge(process_dengue(), on="code_muni", how="left")
-        .merge(process_deforestation(muni_gdf), on="code_muni", how="left")
-        .merge(process_road_distance(muni_gdf), on="code_muni", how="left")
+        .merge(process_deforestation(muni_gdf, prodes), on="code_muni", how="left")
+        .merge(process_road_distance(muni_gdf, prodes), on="code_muni", how="left")
         .merge(process_socioeconomics(), on="code_muni", how="left")
         .merge(process_crops(), on="code_muni", how="left")
         .merge(process_sicor_credit(), on="code_muni", how="left")
