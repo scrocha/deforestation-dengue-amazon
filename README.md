@@ -45,49 +45,77 @@ municípios sem desmatamento (os modelos usam a mediana).
 
 ## Métodos
 
-Notação: $y_i$ é a incidência de dengue do município $i$, $x_{ik}$ seus $p$ preditores, $(u_i,v_i)$ o centroide,
-$d_{ij}$ a distância entre os centroides de $i$ e $j$ e $n = 560$.
+Notação: $y_i$ é a incidência de dengue do município $i$, $x_{ik}$ são seus preditores (desmatamento, crédito, PIB etc.)
+e $n = 560$ é o número de municípios.
 
-- **Moran global e LISA.** Autocorrelação da dengue com vizinhança Queen e pesos $w_{ij}$ normalizados por linha;
-  $z_i = y_i-\bar y$ e o $p$ vem de 999 permutações (semente fixa). O LISA marca "Alto-Alto" quando $z_i>0$, a média dos
-  vizinhos é $>0$ e $p<0{,}05$ (e as demais classes de modo análogo).
+### Dependência espacial: Moran e LISA
 
-  $$I = \frac{n}{\sum_{ij} w_{ij}}\,\frac{\sum_{ij} w_{ij} z_i z_j}{\sum_i z_i^2}$$
+Perguntam se municípios vizinhos têm incidências parecidas. Os vizinhos são os municípios que dividem fronteira (critério
+Queen), e a média dos vizinhos de $i$ é $\sum_j w_{ij}\, y_j$ (os pesos $w_{ij}$ somam 1 em cada município).
 
-- **OLS (global).** Um coeficiente por variável para todo o bioma:
-  $y_i = \beta_0 + \sum_k \beta_k x_{ik} + \varepsilon_i$. O VIF de cada preditor é $1/(1-R_k^2)$.
-- **OLS + efeito fixo de UF.** O mesmo OLS com um intercepto por estado, $+\,\gamma_{s(i)}$.
-- **Misto por UF.** Intercepto e inclinação do desmatamento $d_i$ variam entre os estados:
-  $y_i = \beta_0 + \sum_k \beta_k x_{ik} + b_{0,s(i)} + b_{1,s(i)}\,d_i + \varepsilon_i$, com $(b_0,b_1)\sim N(0,\Sigma)$.
-  O R² é $\mathrm{corr}(y,\hat y)^2$ com os efeitos aleatórios incluídos; o ajuste é por REML, então o AIC é só indicativo.
-- **GWR.** Coeficientes próprios para cada município, por mínimos quadrados ponderados pela distância:
+- **Moran global ($I$)**: um número só para o bioma. Perto de 1, vizinhos parecidos; perto de 0, sem padrão espacial.
+  É a correlação entre a incidência de cada município e a média dos seus vizinhos, ambas medidas em desvios da média
+  geral. O $p$ vem de 999 embaralhamentos aleatórios dos municípios (semente fixa).
+- **LISA**: o mesmo cálculo município a município. Um município é **Alto-Alto** se sua incidência e a dos vizinhos estão
+  acima da média e o resultado é significativo ($p<0{,}05$). **Baixo-Baixo**, **Baixo-Alto** e **Alto-Baixo** seguem a
+  mesma lógica.
 
-  $$\hat{\boldsymbol\beta}(u_i,v_i) = (X^\top W_i X)^{-1} X^\top W_i\,\mathbf y, \qquad
-  W_i = \mathrm{diag}(w_{i1},\dots,w_{in})$$
+### Modelos de regressão
 
-  | Núcleo | Peso $w_{ij}$ | Banda | Cenários |
+Todos tentam explicar $y_i$ pelos preditores. O que muda é o quanto cada modelo deixa a relação variar pelo território.
+
+- **OLS (global).** Uma única equação para o bioma inteiro, em que cada preditor tem um coeficiente fixo:
+  $y_i = \beta_0 + \sum_k \beta_k x_{ik} + \varepsilon_i$. O coeficiente $\beta_k$ diz quanto $y$ muda quando $x_k$ sobe
+  uma unidade, mantidos os demais. O **VIF** mede se um preditor é redundante com os outros (valores altos, acima de 5
+  a 10, indicam colinearidade). O **Moran dos resíduos** ($\varepsilon_i$) mostra se sobrou padrão espacial que o modelo
+  não explicou.
+- **OLS + efeito fixo de UF.** O mesmo OLS, mas cada estado ganha um "ponto de partida" próprio, $\gamma_{s(i)}$, somado
+  à equação. Assim diferenças gerais entre estados (por exemplo, o estado inteiro ter mais dengue) não se misturam com
+  o efeito dos preditores.
+- **Misto por UF.** Também deixa cada estado ter o seu ponto de partida, mas o trata como sorteado de uma distribuição
+  comum (efeito aleatório), em vez de estimá-lo isoladamente. Além disso, o efeito do desmatamento pode variar entre
+  estados: $y_i = \beta_0 + \sum_k \beta_k x_{ik} + b_{0,s(i)} + b_{1,s(i)}\,d_i + \varepsilon_i$, em que $d_i$ é o
+  desmatamento. O R² reportado compara a incidência real com a prevista já com esses ajustes por estado. O ajuste é por
+  REML, então o AIC dele serve só como referência.
+- **GWR (regressão geograficamente ponderada).** Em vez de uma equação para tudo, ajusta **uma equação para cada
+  município**, dando mais peso aos municípios mais próximos dele:
+
+  $$\hat{\boldsymbol\beta}(i) = (X^\top W_i X)^{-1} X^\top W_i\,\mathbf y$$
+
+  É o OLS de sempre, só que a observação $j$ entra com peso $w_{ij}$, que cai com a distância $d_{ij}$ entre os
+  municípios. Assim cada coeficiente vira um mapa. O peso depende do núcleo e da banda (o alcance da vizinhança):
+
+  | Núcleo | Como o peso cai com a distância | Banda | Cenários |
   |---|---|---|---|
-  | bisquare adaptativo | $(1-(d_{ij}/h_i)^2)^2$ se $d_{ij}<h_i$, senão $0$ | $h_i$ = distância ao $b$-ésimo vizinho | A, B |
-  | gaussiano fixo (como no GWmodel do artigo) | $\exp(-\tfrac12 (d_{ij}/h)^2)$ | $h$ único, em metros | C, D |
+  | bisquare adaptativo | suave até zero em $h_i$: $w=(1-(d/h_i)^2)^2$; fora disso, 0 | cada município usa os mesmos $b$ vizinhos mais próximos ($h_i$ é a distância ao $b$-ésimo) | A, B |
+  | gaussiano fixo (como no artigo) | curva em sino: $w=\exp(-\tfrac12 (d/h)^2)$ | mesmo raio $h$ (em metros) para todos | C, D |
 
-  A banda minimiza o AICc, $-2\hat\ell + 2n(\mathrm{tr}\,S+1)/(n-\mathrm{tr}\,S-2)$, em que $S$ leva $\mathbf y$ a
-  $\hat{\mathbf y}$. O R² ajustado segue o GWmodel, com $\mathrm{enp}=2\,\mathrm{tr}(S)-\mathrm{tr}(S^\top S)$:
-  $R^2_{\mathrm{aj}} = 1-(1-R^2)(n-1)/(n-\mathrm{enp}-1)$. O ΔAICc contra o OLS não depende da escala de $y$.
+  A banda é escolhida pelo **AICc**, um critério que equilibra ajuste e complexidade (quanto menor, melhor). Banda
+  curta ajusta bem os dados, mas usa muitos parâmetros; banda longa se aproxima do OLS. O **R² ajustado** do GWR segue o
+  GWmodel (usado pelo artigo) e desconta o número efetivo de parâmetros. O **ΔAICc** é o AICc do GWR menos o do OLS:
+  valor negativo significa que o GWR compensa a complexidade extra, e ele não depende da escala de $y$.
 
 ### Variáveis em cada cenário
+
+Os quatro cenários combinam dois conjuntos de preditores com dois tratamentos dos dados.
 
 - **Conjuntos.** *9 vars*: `avg_deforestation`, `dist_roads`, `average_min_precipitation`, `gdp_capita` e as cinco
   `std_*` (população rural e urbana, crédito agrícola e pecuário, lavoura). *4 vars (artigo)*: `std_deforestation`,
   `std_agri_credit`, `std_live_credit`, `gdp_capita`.
-- **Original (A e C).** Unidades de origem, sem transformação. Exceção: em A o GWR recebe os preditores em z-score e o
-  PIB per capita em $\ln(1+x)$.
-- **Transformado (B e D).** $y^*=\ln(1+y)$, para reduzir a assimetria (muitos zeros, cauda longa), e preditores em
-  z-score, $x^*=(x-\bar x)/s$. Em B aplica-se antes $\ln(1+\max(x,0))$ nos preditores. Em D isso vale só para o
-  OLS + efeito fixo de UF e o misto; o OLS e o GWR de D usam apenas o z-score. Em B e D soma-se ruído de $10^{-10}$
-  para evitar colinearidade exata.
+- **Original (A e C).** Variáveis nas unidades de origem. Exceção: em A, o GWR recebe os preditores em z-score e o PIB
+  per capita em $\ln(1+x)$.
+- **Transformado (B e D).** Dois passos:
+  1. **Log da resposta**, $y^*=\ln(1+y)$: a incidência tem muitos zeros e poucos valores muito altos, e o log reduz
+     essa assimetria.
+  2. **Z-score dos preditores**, $x^*=(x-\bar x)/s$: coloca todos na mesma escala (média 0, desvio 1), de modo que os
+     coeficientes passam a ser "por desvio-padrão" e o GWR fica numericamente estável.
 
-O z-score não muda o ajuste do OLS, só a interpretação dos coeficientes (por desvio-padrão). O log de $y$ muda a
-escala do AIC, que por isso só se compara dentro de um mesmo $y$.
+  Em B os preditores recebem antes $\ln(1+\max(x,0))$. Em D isso vale só para o OLS + efeito fixo de UF e o misto; o OLS
+  e o GWR de D usam apenas o z-score. Em B e D soma-se um ruído minúsculo ($10^{-10}$) aos preditores para evitar
+  colinearidade exata.
+
+O z-score não muda o ajuste do OLS, só a leitura dos coeficientes. O log de $y$ muda a escala do AIC, que por isso só se
+compara entre modelos com o mesmo $y$ (original ou log).
 
 ## Resultados
 
