@@ -147,17 +147,18 @@ variáveis brutas, dá R² ajustado de apenas 0,44 pela fórmula do GWmodel).
 
 ![Clusters LISA](figures/07_lisa_clusters.png)
 
-**R² local do GWR do artigo e coeficientes locais** (escalas cortadas nos percentis 5 e 95). O coeficiente do
-desmatamento muda de sinal no espaço.
+**Cenário C: R² local e coeficientes locais do GWR do artigo** (cores truncadas nos percentis 5 e 95; escala dos
+coeficientes simétrica, branco = zero). O coeficiente do desmatamento muda de sinal no espaço.
 
 ![GWR local da reprodução do artigo](figures/12_paper_gwr_local.png)
 
-**R² local do GWR baseline, sem e com transformações.**
+**R² local do GWR adaptativo nos cenários A (original) e B (log1p + z-score), na mesma escala de cores.**
 
 ![R² local por cenário](figures/11_gwr_r2_comparison.png)
 
-Também em `figures/`: distribuições e boxplots (01, 02), matriz de correlação (03, 10), dispersões (04), mapas
-exploratórios (05, 06), resíduos do OLS (08) e R² local do baseline (09).
+Também em `figures/`: distribuições e boxplots em escala log (01, 02), correlações (03 original; 10 após a
+transformação do cenário B), dispersões (04), mapas exploratórios (05, 06), resíduos do OLS do cenário A (08) e R²
+local do cenário A (09). Todas as figuras têm título, eixos e unidades em português.
 
 ## Limitações
 

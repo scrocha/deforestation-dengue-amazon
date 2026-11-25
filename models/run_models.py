@@ -37,6 +37,13 @@ PRED_COLS = [
 ]  # fmt: skip
 PAPER_COLS = ["std_deforestation", "std_agri_credit", "std_live_credit", "gdp_capita"]  # Tabela 1 do artigo
 RNG = np.random.default_rng(42)  # ruído mínimo contra colinearidade exata; fixo para reprodutibilidade
+LABELS = {
+    "avg_deforestation": "Desmatamento médio anual", "dist_roads": "Distância às rodovias",
+    "average_min_precipitation": "Precipitação mínima", "gdp_capita": "PIB per capita",
+    "std_rural_pop": "População rural por área", "std_urban_pop": "População urbana por área",
+    "std_agri_credit": "Crédito agrícola por área", "std_live_credit": "Crédito pecuário por área",
+    "std_crop_area": "Área de lavoura por área", "dengue_incidence_log": "log(1 + incidência de dengue)",
+}  # fmt: skip
 LISA_COLORS = {0: "lightgrey", 1: "red", 2: "lightblue", 3: "blue", 4: "pink"}
 LISA_LABELS = {
     0: "Não Significativo",
@@ -105,8 +112,10 @@ def save_fig(fig, name: str, tight: bool = True, **kwargs) -> None:
     plt.close(fig)
 
 
-def plot_map(gdf, column, ax, cmap, **kwargs) -> None:
-    gdf.plot(column=column, cmap=cmap, legend=True, ax=ax, edgecolor="black", linewidth=0.1, **kwargs)
+def plot_map(gdf, column, ax, cmap, label=None, **kwargs) -> None:
+    gdf.plot(column=column, cmap=cmap, legend=True, ax=ax, edgecolor="black", linewidth=0.1,
+             legend_kwds={"label": label, "shrink": 0.7}, **kwargs)  # fmt: skip
+    ax.axis("off")
 
 
 def with_gdp_log(cols: list[str]) -> list[str]:
@@ -132,9 +141,9 @@ def run_moran(gdf, w) -> dict:
         subset = gdf[gdf["lisa_cluster"] == cluster]
         if not subset.empty:
             subset.plot(ax=ax, color=color, edgecolor="black", linewidth=0.1)
-            patches.append(mpatches.Patch(color=color, label=LISA_LABELS[cluster]))
+            patches.append(mpatches.Patch(color=color, label=f"{LISA_LABELS[cluster]} (n = {len(subset)})"))
     ax.legend(handles=patches, loc="lower left", title="Clusters LISA")
-    ax.set_title("Clusters Espaciais de Incidência de Dengue (LISA)")
+    ax.set_title(f"Clusters LISA da incidência de dengue (I de Moran global = {mi.I:.3f}; p < 0.05)")
     ax.axis("off")
     save_fig(fig, "07_lisa_clusters.png", tight=False, bbox_inches="tight")
     return metrics
@@ -186,21 +195,25 @@ def run_gwr(gdf, coords) -> dict:
 
 
 def plot_baseline_diagnostics(gdf, gwr_r2: float) -> None:
-    """Resíduos do OLS, R² local do GWR e resumo dos coeficientes locais."""
-    fig, axes = plt.subplots(1, 3, figsize=(15, 4))
+    """Resíduos do OLS, R² local do GWR e resumo dos coeficientes locais (cenário A)."""
+    fig, axes = plt.subplots(1, 3, figsize=(16, 4.5))
     axes[0].hist(gdf["residuo_ols"], bins=40, edgecolor="k")
-    axes[0].set_title("OLS Residuals Distribution")
+    axes[0].set(title="Distribuição dos resíduos do OLS", xlabel="Resíduo (casos/100 mil)", ylabel="Municípios")
     axes[1].scatter(gdf["fitted_ols"], gdf["residuo_ols"], alpha=0.4, s=10)
-    axes[1].set_title("Residuals vs Fitted")
-    plot_map(gdf, "residuo_ols", axes[2], "PRGn")
-    axes[2].set_title("OLS Residuals Map")
+    axes[1].axhline(0, color="k", lw=0.8)
+    axes[1].set(title="Resíduos contra valores ajustados", xlabel="Valor ajustado (casos/100 mil)", ylabel="Resíduo")
+    limit = np.percentile(np.abs(gdf["residuo_ols"]), 95)  # escala simétrica: branco = resíduo zero
+    plot_map(gdf, "residuo_ols", axes[2], "PRGn", "Resíduo (casos/100 mil)", vmin=-limit, vmax=limit)
+    axes[2].set_title("Resíduos do OLS por município")
+    fig.suptitle("Cenário A: OLS com 9 variáveis, escala original")
     save_fig(fig, "08_ols_residuals.png")
 
     fig, axes = plt.subplots(1, 2, figsize=(14, 6))
-    gdf["r2_local_gwr"].hist(bins=30, ax=axes[0], edgecolor="k")
-    axes[0].set_title("Local R² Distribution (GWR)")
-    plot_map(gdf, "r2_local_gwr", axes[1], "YlOrBr")
-    axes[1].set_title(f"Local R² Map (Global R²={gwr_r2:.2f})")
+    gdf["r2_local_gwr"].hist(bins=30, ax=axes[0], edgecolor="k", grid=False)
+    axes[0].set(title="Distribuição do R² local", xlabel="R² local", ylabel="Municípios")
+    plot_map(gdf, "r2_local_gwr", axes[1], "YlOrBr", "R² local")
+    axes[1].set_title("R² local por município")
+    fig.suptitle(f"Cenário A: GWR adaptativo (bisquare), 9 variáveis, escala original (R² global = {gwr_r2:.3f})")
     save_fig(fig, "09_gwr_r2_local.png")
 
     names = ["Intercepto", *PRED_COLS]
@@ -216,13 +229,15 @@ def run_transformed(gdf, w, coords, gwr_r2: float) -> dict:
     X_log = np.log1p(np.maximum(gdf[PRED_COLS].values, 0))
     X = standardize(X_log)
 
-    norm_df = pd.DataFrame(X, columns=PRED_COLS).assign(dengue_incidence_log=y.flatten())
+    norm_df = pd.DataFrame(X, columns=PRED_COLS).assign(dengue_incidence_log=y.flatten()).rename(columns=LABELS)
+    corr = norm_df.corr().iloc[1:, :-1]  # sem a diagonal nem o triângulo superior
     fig, ax = plt.subplots(figsize=(11, 9))
     sns.heatmap(
-        norm_df.corr(), mask=np.triu(np.ones_like(norm_df.corr(), dtype=bool)),
-        annot=True, fmt=".2f", cmap="RdBu_r", center=0, ax=ax,
+        corr, mask=np.triu(np.ones_like(corr, dtype=bool), k=1), annot=True, fmt=".2f", cmap="RdBu_r", center=0,
+        cbar_kws={"label": "Correlação de Pearson"}, ax=ax,
     )  # fmt: skip
-    save_fig(fig, "10_normalized_correlation.png", tight=False)
+    ax.set_title("Cenário B: correlação após log(1 + x) e z-score")
+    save_fig(fig, "10_normalized_correlation.png")
 
     ols = OLS(y, X, w=w, name_x=PRED_COLS)
     bw, results = fit_gwr(coords, y, X)
@@ -231,12 +246,11 @@ def run_transformed(gdf, w, coords, gwr_r2: float) -> dict:
     base, trans = gdf["r2_local_gwr"], gdf["r2_local_gwr_transformed"]
     limits = {"vmin": min(base.min(), trans.min()), "vmax": max(base.max(), trans.max())}
     fig, axes = plt.subplots(1, 2, figsize=(16, 7))
-    plot_map(gdf, "r2_local_gwr", axes[0], "YlOrBr", **limits)
-    axes[0].set_title(f"GWR (R²={gwr_r2:.3f})")
-    plot_map(gdf, "r2_local_gwr_transformed", axes[1], "YlOrBr", **limits)
-    axes[1].set_title(f"GWR com Transformações (R²={float(results.R2):.3f})")
-    for ax in axes:
-        ax.axis("off")
+    plot_map(gdf, "r2_local_gwr", axes[0], "YlOrBr", "R² local", **limits)
+    axes[0].set_title(f"A. escala original (R² global = {gwr_r2:.3f})")
+    plot_map(gdf, "r2_local_gwr_transformed", axes[1], "YlOrBr", "R² local", **limits)
+    axes[1].set_title(f"B. log(1 + x) e z-score (R² global = {float(results.R2):.3f})")
+    fig.suptitle("R² local do GWR adaptativo (bisquare), 9 variáveis, na mesma escala de cores")
     save_fig(fig, "11_gwr_r2_comparison.png")
 
     metrics = {
@@ -255,17 +269,19 @@ def plot_paper_gwr(gdf, results) -> None:
     """R² local e coeficientes locais (desmatamento, PIB per capita) do GWR fixo da reprodução do artigo."""
     panels = {
         "R² local": results.localR2,
-        "Coeficiente do desmatamento": results.params[:, 1],
-        "Coeficiente do PIB per capita": results.params[:, 4],
+        "Coeficiente local do desmatamento (por área)": results.params[:, 1],
+        "Coeficiente local do PIB per capita": results.params[:, 4],
     }
     fig, axes = plt.subplots(1, 3, figsize=(18, 6))
     for ax, (title, values) in zip(axes, panels.items()):
         gdf["_v"] = values
         lo, hi = np.percentile(values, [5, 95])  # corta os extremos para a escala não ser dominada por outliers
-        plot_map(gdf, "_v", ax, "YlOrBr" if title == "R² local" else "RdBu_r", vmin=lo, vmax=hi)
+        if title != "R² local":  # coeficientes: escala simétrica, para o branco marcar o zero
+            lo, hi = -max(abs(lo), abs(hi)), max(abs(lo), abs(hi))
+        plot_map(gdf, "_v", ax, "YlOrBr" if title == "R² local" else "RdBu_r", title.split(" (")[0], vmin=lo, vmax=hi)
         ax.set_title(title)
-        ax.axis("off")
     gdf.drop(columns="_v", inplace=True)
+    fig.suptitle("Cenário C: GWR gaussiano fixo, 4 variáveis, escala original (cores truncadas nos percentis 5 e 95)")
     save_fig(fig, "12_paper_gwr_local.png")
 
 
