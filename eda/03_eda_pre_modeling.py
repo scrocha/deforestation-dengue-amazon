@@ -101,25 +101,11 @@ def plot_scatters(df):
 
 def plot_maps(gdf):
     fig, axes = plt.subplots(1, 2, figsize=(16, 7))
-    gdf.plot(
-        column="dengue_incidence",
-        cmap="YlOrBr",
-        legend=True,
-        edgecolor="black",
-        linewidth=0.2,
-        ax=axes[0],
-    )
+    gdf.plot(column="dengue_incidence", cmap="YlOrBr", legend=True, edgecolor="black", linewidth=0.2, ax=axes[0])
     axes[0].set_title("Dengue Incidence")
     axes[0].axis("off")
 
-    gdf.plot(
-        column="avg_deforestation",
-        cmap="YlOrBr",
-        legend=True,
-        edgecolor="black",
-        linewidth=0.2,
-        ax=axes[1],
-    )
+    gdf.plot(column="avg_deforestation", cmap="YlOrBr", legend=True, edgecolor="black", linewidth=0.2, ax=axes[1])
     axes[1].set_title("Avg Deforestation")
     axes[1].axis("off")
 
@@ -141,16 +127,7 @@ def plot_maps(gdf):
 
         cmap = "Greens" if "precipitation" in col or "crop" in col or "agri" in col else "YlOrBr"
 
-        gdf.plot(
-            column=col,
-            cmap=cmap,
-            legend=True,
-            vmin=vmin,
-            vmax=vmax,
-            edgecolor="black",
-            linewidth=0.1,
-            ax=ax,
-        )
+        gdf.plot(column=col, cmap=cmap, legend=True, vmin=vmin, vmax=vmax, edgecolor="black", linewidth=0.1, ax=ax)
         ax.set_title(col)
         ax.axis("off")
     for i in range(len(predictors), len(axes2)):

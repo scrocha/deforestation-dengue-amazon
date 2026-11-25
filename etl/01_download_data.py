@@ -74,14 +74,7 @@ def get_sidra_data(muni_codes):
     years_str = ",".join(str(y) for y in TARGET_YEARS)
 
     tables = [
-        (
-            "pib.csv",
-            "5938",
-            "37",
-            years_str,
-            ["Município (Código)", "Município", "Ano", "Valor"],
-            None,
-        ),
+        ("pib.csv", "5938", "37", years_str, ["Município (Código)", "Município", "Ano", "Valor"], None),
         (
             "populacao_estimativa.csv",
             "6579",
@@ -90,25 +83,13 @@ def get_sidra_data(muni_codes):
             ["Município (Código)", "Município", "Ano", "Valor"],
             None,
         ),
-        (
-            "lavoura_temporaria.csv",
-            "1612",
-            "216",
-            years_str,
-            ["Município (Código)", "Município", "Ano", "Valor"],
-            None,
-        ),
+        ("lavoura_temporaria.csv", "1612", "216", years_str, ["Município (Código)", "Município", "Ano", "Valor"], None),
         (
             "populacao_situacao.csv",
             "202",
             "93",
             "2010",
-            [
-                "Município (Código)",
-                "Município",
-                "Situação do domicílio",
-                "Valor",
-            ],
+            ["Município (Código)", "Município", "Situação do domicílio", "Valor"],
             {"1": "allxt"},
         ),
     ]
@@ -161,22 +142,10 @@ def fetch_dengue_period(api_key, uf, year, start, end):
 
     try:
         df = get_infodengue(
-            api_key=api_key,
-            disease="dengue",
-            start_date=start.isoformat(),
-            end_date=end.isoformat(),
-            uf=uf,
+            api_key=api_key, disease="dengue", start_date=start.isoformat(), end_date=end.isoformat(), uf=uf
         )
     except Exception as exc:
-        return split_dengue_period(
-            api_key,
-            uf,
-            year,
-            start,
-            end,
-            f"requisição falhou ({type(exc).__name__})",
-            exc,
-        )
+        return split_dengue_period(api_key, uf, year, start, end, f"requisição falhou ({type(exc).__name__})", exc)
     if has_duplicate_dengue_rows(df):
         return split_dengue_period(api_key, uf, year, start, end, "semanas repetidas")
     save_dengue_checkpoint(df, path)
@@ -227,10 +196,7 @@ def get_dengue_data():
     path = RAW_DIR / "dengue.csv"
 
     if path.exists():
-        existing = pd.read_csv(
-            path,
-            usecols=["municipio_geocodigo", "SE", "Localidade_id"],
-        )
+        existing = pd.read_csv(path, usecols=["municipio_geocodigo", "SE", "Localidade_id"])
         if not existing.duplicated().any():
             return
         print("Dengue consolidada contém semanas repetidas; refazendo downloads.")
@@ -259,11 +225,7 @@ def get_dengue_data():
                     continue
             try:
                 dengue = get_infodengue(
-                    api_key=api_key,
-                    disease="dengue",
-                    start_date=f"{year}-01-01",
-                    end_date=f"{year}-12-31",
-                    uf=uf,
+                    api_key=api_key, disease="dengue", start_date=f"{year}-01-01", end_date=f"{year}-12-31", uf=uf
                 )
             except Exception as exc:
                 print(f"Aviso: dengue {year}/{uf} falhou ({type(exc).__name__}); tentando por mês.")
@@ -342,20 +304,13 @@ def main():
         catalog = requests.get(TERRABRASILIS_API, timeout=60).json()
         link = next(d["link"] for d in catalog if re.search(PRODES_LINK_REGEX, d["link"]))
         name = Path(link).name
-        download_and_extract(
-            f"https://terrabrasilis.dpi.inpe.br{link}",
-            name,
-            name.removesuffix(".zip"),
-        )
+        download_and_extract(f"https://terrabrasilis.dpi.inpe.br{link}", name, name.removesuffix(".zip"))
         (RAW_DIR / name.removesuffix(".zip")).rename(prodes_path)
 
     print("Baixando dados de precipitação...")
     precip_path = RAW_DIR / "precipitation_min_amzl.asc"
     if not precip_path.exists():
-        response = requests.get(
-            "https://www.dpi.inpe.br/amb_data/Amazonia/bio14_amzl.asc",
-            timeout=300,
-        )
+        response = requests.get("https://www.dpi.inpe.br/amb_data/Amazonia/bio14_amzl.asc", timeout=300)
         response.raise_for_status()
         with open(precip_path, "wb") as f:
             f.write(response.content)
