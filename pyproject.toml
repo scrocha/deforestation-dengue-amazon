@@ -23,7 +23,6 @@ dependencies = [
     "rasterio>=1.4.4",
     "spreg>=1.8.5",
     "libpysal>=4.14.1",
-    "scikit-learn>=1.8.0",
 ]
 
 [tool.ruff]

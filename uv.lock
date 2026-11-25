@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.12'",
@@ -453,7 +453,6 @@ dependencies = [
     { name = "rasterio" },
     { name = "rasterstats" },
     { name = "requests" },
-    { name = "scikit-learn" },
     { name = "scipy" },
     { name = "seaborn" },
     { name = "sidrapy" },
@@ -476,7 +475,6 @@ requires-dist = [
     { name = "rasterio", specifier = ">=1.4.4" },
     { name = "rasterstats", specifier = ">=0.20.0" },
     { name = "requests", specifier = ">=2.31" },
-    { name = "scikit-learn", specifier = ">=1.8.0" },
     { name = "scipy", specifier = ">=1.11" },
     { name = "seaborn", specifier = ">=0.13" },
     { name = "sidrapy", specifier = ">=0.1" },

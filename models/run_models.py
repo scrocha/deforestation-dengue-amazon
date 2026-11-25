@@ -24,6 +24,8 @@ from scipy.stats import norm
 from spreg import OLS
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 
+plt.switch_backend("Agg")  # sem janela: o pipeline só grava figuras
+
 ROOT = Path(__file__).resolve().parent.parent
 DATA_PATH = ROOT / "data" / "processed" / "deforestation_dengue_geo.gpkg"
 RESULTS_DIR = ROOT / "data" / "results"
@@ -75,19 +77,32 @@ def fit_gwr(coords: np.ndarray, y: np.ndarray, X: np.ndarray):
     bw = golden_section(
         40 + 2 * (X.shape[1] + 1), len(y), 0.38197, lambda b: gwr_aicc(coords, y, X, int(b)), 1e-6, 200, None, True
     )[0]
-    return bw, GWR(coords, y, X, bw, kernel="bisquare", fixed=False).fit()
+    return bw, GWR(coords, y, X, bw, kernel="bisquare", fixed=False, n_jobs=1).fit()
 
 
 def fit_gwr_fixed(coords: np.ndarray, y: np.ndarray, X: np.ndarray):
     """GWR com núcleo gaussiano fixo e banda (m) por AICc, como no GWmodel usado pelo artigo."""
-    bw = Sel_BW(coords, y, X, kernel="gaussian", fixed=True).search(criterion="AICc")
-    return bw, GWR(coords, y, X, bw, kernel="gaussian", fixed=True).fit()
+    bw = Sel_BW(coords, y, X, kernel="gaussian", fixed=True, n_jobs=1).search(criterion="AICc")
+    return bw, GWR(coords, y, X, bw, kernel="gaussian", fixed=True, n_jobs=1).fit()
 
 
 def gwmodel_adj_r2(results, n: int) -> float:
     """R² ajustado do GWmodel: parâmetros efetivos = 2 tr(S) - tr(S'S)."""
     enp = 2 * results.tr_S - results.tr_STS
     return float(1 - (1 - results.R2) * (n - 1) / (n - enp - 1))
+
+
+def standardize(x: np.ndarray) -> np.ndarray:
+    """Z-score com ruído mínimo contra colinearidade exata."""
+    z = zscore(x, 1e-9)
+    return z + RNG.normal(0, 1e-10, z.shape)
+
+
+def save_fig(fig, name: str, tight: bool = True, **kwargs) -> None:
+    if tight:
+        fig.tight_layout()
+    fig.savefig(FIGURES_DIR / name, dpi=150, **kwargs)
+    plt.close(fig)
 
 
 def plot_map(gdf, column, ax, cmap, **kwargs) -> None:
@@ -120,8 +135,7 @@ def run_moran(gdf, w) -> dict:
     ax.legend(handles=patches, loc="lower left", title="Clusters LISA")
     ax.set_title("Clusters Espaciais de Incidência de Dengue (LISA)")
     ax.axis("off")
-    fig.savefig(FIGURES_DIR / "07_lisa_clusters.png", dpi=150, bbox_inches="tight")
-    plt.close(fig)
+    save_fig(fig, "07_lisa_clusters.png", tight=False, bbox_inches="tight")
     return metrics
 
 
@@ -154,11 +168,11 @@ def run_gwr(gdf, coords) -> dict:
     gdf["r2_local_gwr"] = results.localR2
     gdf["y_pred_gwr"] = results.predy.flatten()
     gdf["resid_gwr"] = results.resid_response.flatten()
-    pvals = results.pvalues if results.pvalues is not None else 2 * norm.sf(np.abs(results.tvalues))
+    pvalues = 2 * norm.sf(np.abs(results.tvalues))  # o mgwr não calcula p-valores locais
     for i, name in enumerate(["Intercepto", *PRED_COLS]):
         gdf[f"coef_{name}"] = results.params[:, i]
         gdf[f"tvalue_{name}"] = results.tvalues[:, i]
-        gdf[f"pvalue_{name}"] = pvals[:, i]
+        gdf[f"pvalue_{name}"] = pvalues[:, i]
 
     metrics = {
         "gwr_r2": float(results.R2),
@@ -179,16 +193,14 @@ def plot_baseline_diagnostics(gdf, gwr_r2: float) -> None:
     axes[1].set_title("Residuals vs Fitted")
     plot_map(gdf, "residuo_ols", axes[2], "PRGn")
     axes[2].set_title("OLS Residuals Map")
-    fig.tight_layout()
-    fig.savefig(FIGURES_DIR / "08_ols_residuals.png", dpi=150)
+    save_fig(fig, "08_ols_residuals.png")
 
     fig, axes = plt.subplots(1, 2, figsize=(14, 6))
     gdf["r2_local_gwr"].hist(bins=30, ax=axes[0], edgecolor="k")
     axes[0].set_title("Local R² Distribution (GWR)")
     plot_map(gdf, "r2_local_gwr", axes[1], "YlOrBr")
     axes[1].set_title(f"Local R² Map (Global R²={gwr_r2:.2f})")
-    fig.tight_layout()
-    fig.savefig(FIGURES_DIR / "09_gwr_r2_local.png", dpi=150)
+    save_fig(fig, "09_gwr_r2_local.png")
 
     names = ["Intercepto", *PRED_COLS]
     stats = gdf[[f"coef_{n}" for n in names]].describe().T
@@ -201,8 +213,7 @@ def run_transformed(gdf, w, coords, gwr_r2: float) -> dict:
     """log1p em y e X, padronização, OLS + GWR; compara o R² local com o baseline."""
     y = np.log1p(gdf["dengue_incidence"].values).reshape(-1, 1)
     X_log = np.log1p(np.maximum(gdf[PRED_COLS].values, 0))
-    X = zscore(X_log, 1e-9)
-    X += RNG.normal(0, 1e-10, X.shape)
+    X = standardize(X_log)
 
     norm_df = pd.DataFrame(X, columns=PRED_COLS).assign(dengue_incidence_log=y.flatten())
     fig, ax = plt.subplots(figsize=(11, 9))
@@ -210,8 +221,7 @@ def run_transformed(gdf, w, coords, gwr_r2: float) -> dict:
         norm_df.corr(), mask=np.triu(np.ones_like(norm_df.corr(), dtype=bool)),
         annot=True, fmt=".2f", cmap="RdBu_r", center=0, ax=ax,
     )  # fmt: skip
-    fig.savefig(FIGURES_DIR / "10_normalized_correlation.png", dpi=150)
-    plt.close(fig)
+    save_fig(fig, "10_normalized_correlation.png", tight=False)
 
     ols = OLS(y, X, w=w, name_x=PRED_COLS)
     bw, results = fit_gwr(coords, y, X)
@@ -226,9 +236,7 @@ def run_transformed(gdf, w, coords, gwr_r2: float) -> dict:
     axes[1].set_title(f"GWR com Transformações (R²={float(results.R2):.3f})")
     for ax in axes:
         ax.axis("off")
-    fig.tight_layout()
-    fig.savefig(FIGURES_DIR / "11_gwr_r2_comparison.png", dpi=150)
-    plt.close(fig)
+    save_fig(fig, "11_gwr_r2_comparison.png")
 
     metrics = {
         "ols_trans_r2": float(ols.r2),
@@ -247,8 +255,7 @@ def run_paper(gdf, w, coords) -> dict:
     cols = PAPER_COLS  # como na Tabela 2 do artigo: PIB per capita sem log
     X_raw = gdf[cols].values.astype(float)
     y_raw = gdf["dengue_incidence"].values.astype(float).reshape(-1, 1)
-    X_std = zscore(X_raw, 1e-9)
-    X_std += RNG.normal(0, 1e-10, X_std.shape)
+    X_std = standardize(X_raw)
     y_trans = np.log1p(y_raw)
 
     n = len(y_raw)
@@ -332,7 +339,7 @@ def run_hierarchical(gdf) -> dict:
 
 def print_summary(moran: dict, metrics: dict[str, dict], hierarchical: dict) -> None:
     def fmt(r2, aic) -> str:
-        return f"{round(r2, 3) if r2 else 0} ({round(aic, 1) if aic else '-'})"
+        return f"{r2:.3f} ({aic:.1f})"
 
     print(f"Moran global dengue: {moran['global_moran_i']:.3f} (p={moran['global_moran_p']:.3f})\n")
     ols, gwr, trans, paper = (metrics[k] for k in ("ols", "gwr", "trans", "paper"))
@@ -353,8 +360,8 @@ def print_summary(moran: dict, metrics: dict[str, dict], hierarchical: dict) -> 
                 "Iteração": label,
                 "Vars": n_vars,
                 "OLS R² (AIC)": fmt(ols_r2, ols_aic),
-                "Hier (Muni) R² (AIC)": f"{round(h['muni_r2'], 3)} ({round(h['muni_aic'], 1)})",
-                "Hier (Est.) R² (AIC)": f"{round(h['state_r2'], 3)} ({round(h['state_aic'], 1)})",
+                "Hier (Muni) R² (AIC)": fmt(h["muni_r2"], h["muni_aic"]),
+                "Hier (Est.) R² (AIC)": fmt(h["state_r2"], h["state_aic"]),
                 "GWR R² (AIC)": fmt(gwr_r2, gwr_aic),
             }
         )

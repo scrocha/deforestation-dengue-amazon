@@ -1,15 +1,21 @@
 from pathlib import Path
+
 import geopandas as gpd
 import pandas as pd
 import rasterio
 from rasterstats import zonal_stats
 
-__DIR = Path(__file__).parent
-RAW_DIR = __DIR.parent / "data" / "raw"
-PROCESSED_DIR = __DIR.parent / "data" / "processed"
-PROCESSED_DIR.mkdir(exist_ok=True)
+ROOT = Path(__file__).resolve().parent.parent
+RAW_DIR = ROOT / "data" / "raw"
+PROCESSED_DIR = ROOT / "data" / "processed"
+PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
 
 TARGET_YEARS = list(range(2016, 2022))
+
+
+def read_sidra(name):
+    df = pd.read_csv(RAW_DIR / name).rename(columns={"Município (Código)": "code_muni"})
+    return df.assign(Valor=pd.to_numeric(df["Valor"], errors="coerce"))
 
 
 def load_base_municipalities():
@@ -21,15 +27,9 @@ def load_base_municipalities():
 
 def process_dengue():
     df = pd.read_csv(RAW_DIR / "dengue.csv")
-    df["ano"] = pd.to_datetime(df["data_iniSE"]).dt.year
-    filtered = df[df["ano"].isin(TARGET_YEARS)]
-    dengue = (
-        filtered.groupby("municipio_geocodigo")["p_inc100k"]
-        .mean()
-        .reset_index()
-        .rename(columns={"municipio_geocodigo": "code_muni", "p_inc100k": "dengue_incidence"})
-    )
-    return dengue
+    df = df[pd.to_datetime(df["data_iniSE"]).dt.year.isin(TARGET_YEARS)]
+    mean = df.groupby("municipio_geocodigo")["p_inc100k"].mean()
+    return mean.rename_axis("code_muni").rename("dengue_incidence").reset_index()
 
 
 def locate_deforestation(muni_gdf, prodes):
@@ -45,106 +45,59 @@ def locate_deforestation(muni_gdf, prodes):
 
 
 def process_deforestation(joined):
-    annual_sum = joined.groupby(["code_muni", "year"])["area_km"].sum().reset_index()
-    return (
-        annual_sum.groupby("code_muni")["area_km"].mean().reset_index().rename(columns={"area_km": "avg_deforestation"})
-    )
+    annual = joined.groupby(["code_muni", "year"])["area_km"].sum()
+    return annual.groupby("code_muni").mean().rename("avg_deforestation").reset_index()
 
 
 def process_road_distance(joined):
-    """Distância média (km) do centroide de cada polígono desmatado à rodovia mais próxima (`joined` já tem centroides)."""
+    """Distância média (km) do centroide de cada polígono desmatado à rodovia mais próxima."""
     roads = gpd.read_file(RAW_DIR / "2014" / "rodovia_2014.shp")
     if roads.crs is None:
         roads = roads.set_crs("EPSG:4674")
-    roads = roads.to_crs("EPSG:5880")
-
     points = joined[["code_muni", "geometry"]].reset_index(drop=True).to_crs("EPSG:5880")
-    nearest = points.sjoin_nearest(roads[["geometry"]], distance_col="dist")
+    nearest = points.sjoin_nearest(roads.to_crs("EPSG:5880")[["geometry"]], distance_col="dist")
     nearest = nearest[~nearest.index.duplicated()]
-    nearest["dist"] /= 1000
-    return nearest.groupby("code_muni")["dist"].mean().reset_index().rename(columns={"dist": "dist_roads"})
+    return (nearest.groupby("code_muni")["dist"].mean() / 1000).rename("dist_roads").reset_index()
 
 
 def process_socioeconomics():
-    pib = pd.read_csv(RAW_DIR / "pib.csv")
-    pib["Valor"] = pd.to_numeric(pib["Valor"], errors="coerce")
-    pib_avg = (
-        pib[pib["Ano"].isin(TARGET_YEARS)]
-        .groupby("Município (Código)")["Valor"]
-        .mean()
-        .reset_index()
-        .rename(columns={"Valor": "gdp_total_thousand"})
-    )
+    def yearly_mean(name, column):
+        df = read_sidra(name)
+        return df[df["Ano"].isin(TARGET_YEARS)].groupby("code_muni")["Valor"].mean().rename(column)
 
-    pop_legacy = pd.read_csv(RAW_DIR / "populacao_situacao.csv")
-    pop_legacy["Valor"] = pd.to_numeric(pop_legacy["Valor"], errors="coerce")
-    pop_avg = (
-        pop_legacy[pop_legacy["Situação do domicílio"].isin(["Urbana", "Rural"])]
-        .groupby(["Município (Código)", "Situação do domicílio"])["Valor"]
-        .mean()
-        .unstack()
-        .reset_index()
-        .rename(columns={"Urbana": "urban_pop", "Rural": "rural_pop"})
-    )
-
-    pop_est = pd.read_csv(RAW_DIR / "populacao_estimativa.csv")
-    pop_est["Valor"] = pd.to_numeric(pop_est["Valor"], errors="coerce")
-    pop_est_avg = (
-        pop_est[pop_est["Ano"].isin(TARGET_YEARS)]
-        .groupby("Município (Código)")["Valor"]
-        .mean()
-        .reset_index()
-        .rename(columns={"Valor": "population_estimated"})
-    )
-
-    return (
-        pib_avg.merge(pop_avg, on="Município (Código)", how="left")
-        .merge(pop_est_avg, on="Município (Código)", how="left")
-        .rename(columns={"Município (Código)": "code_muni"})
-    )
+    census = read_sidra("populacao_situacao.csv")
+    census = census[census["Situação do domicílio"].isin(["Urbana", "Rural"])]
+    census = census.groupby(["code_muni", "Situação do domicílio"])["Valor"].mean().unstack()
+    census = census.rename(columns={"Urbana": "urban_pop", "Rural": "rural_pop"})
+    gdp = yearly_mean("pib.csv", "gdp_total_thousand")
+    return pd.concat(
+        [gdp, census, yearly_mean("populacao_estimativa.csv", "population_estimated")], axis=1
+    ).reset_index()
 
 
 def process_crops():
-    crop = pd.read_csv(RAW_DIR / "lavoura_temporaria.csv")
-    crop["Valor"] = pd.to_numeric(crop["Valor"], errors="coerce")
-    crop_avg = crop.groupby("Município (Código)")["Valor"].mean().reset_index()
-    return (
-        crop_avg.assign(avg_crop_area=crop_avg.Valor / 100.0)
-        .drop(columns=["Valor"])
-        .rename(columns={"Município (Código)": "code_muni"})
-    )
+    crop = read_sidra("lavoura_temporaria.csv").groupby("code_muni")["Valor"].mean()
+    return (crop / 100.0).rename("avg_crop_area").reset_index()
 
 
 def process_sicor_credit():
     credits = []
-    for y in TARGET_YEARS:
-        df = pd.read_csv(RAW_DIR / f"sicor_contratos_{y}.csv")
+    for year in TARGET_YEARS:
+        df = pd.read_csv(RAW_DIR / f"sicor_contratos_{year}.csv")
         df["total"] = pd.to_numeric(df.VlCusteio, errors="coerce").fillna(0) + pd.to_numeric(
             df.VlInvestimento, errors="coerce"
         ).fillna(0)
         df["code_muni"] = df.codMunicIbge.fillna(0).astype(int)
-        credits.append(
-            df.groupby(["code_muni", "Atividade"])["total"]
-            .sum()
-            .unstack()
-            .reindex(columns=[1, 2], fill_value=0)
-            .rename(columns={1: "agri", 2: "live"})
-        )
-
-    return (
-        pd.concat(credits)
-        .groupby(level=0)
-        .mean()
-        .reset_index()
-        .rename(columns={"agri": "avg_agri_credit", "live": "avg_livestock_credit"})
-    )
+        by_activity = df.groupby(["code_muni", "Atividade"])["total"].sum().unstack()
+        credits.append(by_activity.reindex(columns=[1, 2], fill_value=0).rename(columns={1: "agri", 2: "live"}))
+    mean = pd.concat(credits).groupby(level=0).mean()
+    return mean.rename(columns={"agri": "avg_agri_credit", "live": "avg_livestock_credit"}).reset_index()
 
 
 def process_precipitation(muni_gdf):
     muni_proj = muni_gdf[["code_muni", "geometry"]].to_crs("EPSG:4326")
-    with rasterio.open(str(RAW_DIR / "precipitation_min_amzl.asc")) as src:
+    with rasterio.open(RAW_DIR / "precipitation_min_amzl.asc") as src:
         data, affine, nodata = src.read(1), src.transform, src.nodata
-
     stats = zonal_stats(muni_proj, data, affine=affine, stats="mean sum", nodata=nodata)
     return pd.DataFrame(
         {
@@ -164,15 +117,19 @@ def main():
         where=f"year IN ({', '.join(map(str, TARGET_YEARS))})",
     ).to_crs(muni_gdf.crs)
     joined = locate_deforestation(muni_gdf, prodes)
-    data = (
-        muni_gdf.merge(process_dengue(), on="code_muni", how="left")
-        .merge(process_deforestation(joined), on="code_muni", how="left")
-        .merge(process_road_distance(joined), on="code_muni", how="left")
-        .merge(process_socioeconomics(), on="code_muni", how="left")
-        .merge(process_crops(), on="code_muni", how="left")
-        .merge(process_sicor_credit(), on="code_muni", how="left")
-        .merge(process_precipitation(muni_gdf), on="code_muni", how="left")
-    )
+
+    data = muni_gdf
+    for table in (
+        process_dengue(),
+        process_deforestation(joined),
+        process_road_distance(joined),
+        process_socioeconomics(),
+        process_crops(),
+        process_sicor_credit(),
+        process_precipitation(muni_gdf),
+    ):
+        data = data.merge(table, on="code_muni", how="left")
+
     # Sem desmatamento a distância às rodovias é indefinida (não 0 km): fica ausente e os modelos imputam.
     dist_roads = data["dist_roads"]
     data = data.fillna(0)
@@ -181,7 +138,7 @@ def main():
     # do artigo) = PIB total / população estimada.
     data["gdp_capita"] = data["gdp_total_thousand"] / data["population_estimated"]
 
-    std_columns = {
+    per_area = {
         "std_deforestation": "avg_deforestation",
         "std_urban_pop": "urban_pop",
         "std_rural_pop": "rural_pop",
@@ -190,7 +147,7 @@ def main():
         "std_agri_credit": "avg_agri_credit",
         "std_live_credit": "avg_livestock_credit",
     }
-    for std_col, source_col in std_columns.items():
+    for std_col, source_col in per_area.items():
         data[std_col] = data[source_col] / data["area_km2"]
 
     data.to_csv(PROCESSED_DIR / "deforestation_dengue_data.csv", index=False)
