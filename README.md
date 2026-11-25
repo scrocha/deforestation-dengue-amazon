@@ -172,34 +172,45 @@ variáveis brutas, dá R² ajustado de apenas 0,44 pela fórmula do GWmodel).
 ## Figuras
 
 Os mapas e a matriz de correlação seguem o estilo das figuras do artigo (moldura, classes discretas de cor, painéis A/B).
+Aqui estão as figuras principais, na ordem da análise; as demais ficam em `figures/` (lista ao final).
 
-**Clusters LISA da incidência de dengue** (cores e classes da Fig. 3 do artigo) e diagrama de Moran. Hotspots em MT e
-AC; coldspots em MA e PA.
+**1. Dengue e desmatamento por município.** A escala de cores é em raiz quadrada, para distinguir os valores baixos.
 
-![Clusters LISA](figures/07_lisa_clusters.png)
+![Mapa exploratório](figures/05_exploratory_map.png)
 
-**Cenário C, coeficientes locais (A) e p-valores (B) do GWR do artigo**, no formato das Figs. 6 a 9. Os p-valores usam a
-aproximação normal dos t locais, sem correção para múltiplas comparações; os coeficientes dos créditos estão em mil R$/km².
-
-![Coeficientes e p-valores do GWR](figures/13_paper_gwr_coef_pvalues.png)
-
-**Cenário C, R² local** (Fig. 5 do artigo).
-
-![R² local do cenário C](figures/12_paper_gwr_r2.png)
-
-**R² local do GWR adaptativo nos cenários A (original) e B (log1p + z-score), na mesma escala de cores.**
-
-![R² local por cenário](figures/11_gwr_r2_comparison.png)
-
-**Correlações: este repositório (abaixo da diagonal) e artigo (acima, Fig. 4).** Os valores do artigo foram lidos da
+**2. Correlações: este repositório (abaixo da diagonal) e artigo (acima, Fig. 4).** Os valores do artigo foram lidos da
 figura; alguns são tênues no PDF, então pode haver diferença de 0,01 a 0,02.
 
 ![Correlações contra o artigo](figures/14_correlation_vs_paper.png)
 
-Também em `figures/`: distribuições com mediana (01) e boxplots em escala log (02), matriz de correlação (03),
-dispersões com tendência LOWESS e ρ de Spearman (04), mapas exploratórios e dos preditores em escala de potência (05, 06),
-resíduos do OLS do cenário A (08), R² local do cenário A (09) e correlação após a transformação do cenário B (10).
-Todas as figuras têm título, eixos e unidades em português.
+**3. Dependência espacial: clusters LISA** (cores e classes da Fig. 3 do artigo) e diagrama de Moran. Hotspots em MT e
+AC; coldspots em MA e PA.
+
+![Clusters LISA](figures/07_lisa_clusters.png)
+
+**4. Resíduos do OLS (cenário A).** O mapa mostra agrupamentos de resíduos positivos e negativos, o padrão espacial que
+o Moran dos resíduos quantifica e que justifica o GWR.
+
+![Resíduos do OLS](figures/08_ols_residuals.png)
+
+**5. R² local do GWR adaptativo nos cenários A (original) e B (log1p + z-score), na mesma escala de cores.**
+
+![R² local por cenário](figures/11_gwr_r2_comparison.png)
+
+**6. Reprodução do artigo (cenário C): R² local** (Fig. 5 do artigo).
+
+![R² local do cenário C](figures/12_paper_gwr_r2.png)
+
+**7. Reprodução do artigo (cenário C): coeficientes locais (A) e p-valores (B)**, no formato das Figs. 6 a 9. Os p-valores
+usam a aproximação normal dos t locais, sem correção para múltiplas comparações; os coeficientes dos créditos estão em
+mil R$/km².
+
+![Coeficientes e p-valores do GWR](figures/13_paper_gwr_coef_pvalues.png)
+
+Também em `figures/`: distribuições com mediana (01), boxplots em escala log (02), matriz de correlação só deste
+repositório (03), dispersões com tendência LOWESS e ρ de Spearman (04), mapas dos preditores em escala de potência (06),
+R² local do cenário A (09) e correlação após a transformação do cenário B (10). Todas as figuras têm título, eixos e
+unidades em português.
 
 ## Como executar
 
