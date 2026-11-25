@@ -19,9 +19,7 @@ DATA_DIR = __DIR.parent / "data"
 RAW_DIR = DATA_DIR / "raw"
 DATA_DIR.mkdir(exist_ok=True)
 RAW_DIR.mkdir(exist_ok=True)
-GEOBR_RELEASE_URL = (
-    "https://github.com/ipeaGIT/geobr/releases/download/v1.7.0/"
-)
+GEOBR_RELEASE_URL = "https://github.com/ipeaGIT/geobr/releases/download/v1.7.0/"
 TERRABRASILIS_API = "https://terrabrasilis.dpi.inpe.br/business/api/v1/download/all"
 PRODES_LINK_REGEX = r"/amz-prodes/vector/prodes_biome_amazonia_v\d+\.gpkg\.zip$"
 DENGUE_KEY_COLUMNS = ("municipio_geocodigo", "SE", "Localidade_id")
@@ -29,17 +27,13 @@ DENGUE_KEY_COLUMNS = ("municipio_geocodigo", "SE", "Localidade_id")
 
 def read_geobr_layer(geo, year, simplified=True):
     # Use the geobr release mirror directly; the IPEA host currently hangs.
-    metadata = download_metadata(
-        url=f"{GEOBR_RELEASE_URL}metadata_1.7.0_gpkg.csv"
-    )
+    metadata = download_metadata(url=f"{GEOBR_RELEASE_URL}metadata_1.7.0_gpkg.csv")
     metadata = metadata[(metadata["geo"] == geo) & (metadata["year"] == year)]
     is_simplified = metadata["download_path"].str.endswith("_simplified.gpkg")
     metadata = metadata[is_simplified if simplified else ~is_simplified].copy()
     if metadata.empty:
         raise ValueError(f"geobr não tem {geo} para {year}.")
-    metadata["download_path"] = metadata["download_path"].map(
-        lambda url: f"{GEOBR_RELEASE_URL}{Path(url).name}"
-    )
+    metadata["download_path"] = metadata["download_path"].map(lambda url: f"{GEOBR_RELEASE_URL}{Path(url).name}")
     return download_gpkg(metadata)
 
 
@@ -48,11 +42,9 @@ def download_shapefiles():
     amazon_path = RAW_DIR / "amazon.gpkg"
 
     if not amazon_path.exists():
-        amazon = (
-            read_geobr_layer("biomes", year=2019)
-            .loc[lambda df: df["name_biome"] == "Amazônia"]
-            .copy()
-        ).to_crs("EPSG:4326")
+        amazon = (read_geobr_layer("biomes", year=2019).loc[lambda df: df["name_biome"] == "Amazônia"].copy()).to_crs(
+            "EPSG:4326"
+        )
         amazon.to_file(amazon_path, driver=DRIVER)
     else:
         amazon = GeoDataFrame.from_file(amazon_path)
@@ -150,9 +142,7 @@ def has_duplicate_dengue_rows(df):
         return False
     missing = set(DENGUE_KEY_COLUMNS).difference(df.columns)
     if missing:
-        raise ValueError(
-            f"Resposta do Infodengue sem as chaves semanais esperadas: {sorted(missing)}"
-        )
+        raise ValueError(f"Resposta do Infodengue sem as chaves semanais esperadas: {sorted(missing)}")
     return df.duplicated(subset=DENGUE_KEY_COLUMNS).any()
 
 
@@ -163,9 +153,7 @@ def save_dengue_checkpoint(df, path):
 
 
 def fetch_dengue_period(api_key, uf, year, start, end):
-    path = RAW_DIR / (
-        f"dengue_{uf}_{year}_range_{start:%Y%m%d}_{end:%Y%m%d}.csv"
-    )
+    path = RAW_DIR / (f"dengue_{uf}_{year}_range_{start:%Y%m%d}_{end:%Y%m%d}.csv")
     if path.exists():
         cached = pd.read_csv(path)
         if not has_duplicate_dengue_rows(cached):
@@ -190,9 +178,7 @@ def fetch_dengue_period(api_key, uf, year, start, end):
             exc,
         )
     if has_duplicate_dengue_rows(df):
-        return split_dengue_period(
-            api_key, uf, year, start, end, "semanas repetidas"
-        )
+        return split_dengue_period(api_key, uf, year, start, end, "semanas repetidas")
     save_dengue_checkpoint(df, path)
     return df
 
@@ -210,12 +196,8 @@ def split_dengue_period(api_key, uf, year, start, end, reason, error=None):
     right = fetch_dengue_period(api_key, uf, year, middle + timedelta(days=1), end)
     df = pd.concat([left, right], ignore_index=True).drop_duplicates()
     if has_duplicate_dengue_rows(df):
-        raise RuntimeError(
-            f"Dengue {year}/{uf} tem registros conflitantes em {start}–{end}."
-        )
-    path = RAW_DIR / (
-        f"dengue_{uf}_{year}_range_{start:%Y%m%d}_{end:%Y%m%d}.csv"
-    )
+        raise RuntimeError(f"Dengue {year}/{uf} tem registros conflitantes em {start}–{end}.")
+    path = RAW_DIR / (f"dengue_{uf}_{year}_range_{start:%Y%m%d}_{end:%Y%m%d}.csv")
     save_dengue_checkpoint(df, path)
     return df
 
@@ -260,9 +242,7 @@ def get_dengue_data():
         state_path = RAW_DIR / f"dengue_{uf}.csv"
         if state_path.exists():
             state_data = pd.read_csv(state_path)
-            state_data["year"] = pd.to_datetime(
-                state_data["data_iniSE"], errors="coerce"
-            ).dt.year
+            state_data["year"] = pd.to_datetime(state_data["data_iniSE"], errors="coerce").dt.year
         else:
             state_data = pd.DataFrame()
 
@@ -273,12 +253,8 @@ def get_dengue_data():
                 if not has_duplicate_dengue_rows(cached_year):
                     continue
             if not state_data.empty:
-                cached_year = state_data[state_data["year"] == year].drop(
-                    columns="year"
-                )
-                if not cached_year.empty and not has_duplicate_dengue_rows(
-                    cached_year
-                ):
+                cached_year = state_data[state_data["year"] == year].drop(columns="year")
+                if not cached_year.empty and not has_duplicate_dengue_rows(cached_year):
                     save_dengue_checkpoint(cached_year, year_path)
                     continue
             try:
@@ -290,17 +266,11 @@ def get_dengue_data():
                     uf=uf,
                 )
             except Exception as exc:
-                print(
-                    f"Aviso: dengue {year}/{uf} falhou ({type(exc).__name__}); "
-                    "tentando por mês."
-                )
+                print(f"Aviso: dengue {year}/{uf} falhou ({type(exc).__name__}); tentando por mês.")
                 dengue = fetch_dengue_months(api_key, uf, year)
             else:
                 if has_duplicate_dengue_rows(dengue):
-                    print(
-                        f"Aviso: dengue {year}/{uf} veio com semanas repetidas; "
-                        "refazendo por mês."
-                    )
+                    print(f"Aviso: dengue {year}/{uf} veio com semanas repetidas; refazendo por mês.")
                     dengue = fetch_dengue_months(api_key, uf, year)
             if not dengue.empty:
                 save_dengue_checkpoint(dengue, year_path)
@@ -323,9 +293,7 @@ def get_sicor_data():
     for year in TARGET_YEARS:
         path = RAW_DIR / f"sicor_contratos_{year}.csv"
         if not path.exists():
-            pd.read_csv(
-                f"{base_url}{year}.gz", sep=";", encoding="latin1"
-            ).to_csv(path, index=False)
+            pd.read_csv(f"{base_url}{year}.gz", sep=";", encoding="latin1").to_csv(path, index=False)
 
 
 def download_and_extract(url, zip_name, target_file):
@@ -334,19 +302,17 @@ def download_and_extract(url, zip_name, target_file):
         print(f"Baixando {url}...")
         with requests.get(url, stream=True, timeout=300) as r:
             r.raise_for_status()
-            total_size = int(r.headers.get('content-length', 0))
+            total_size = int(r.headers.get("content-length", 0))
             with open(zip_path, "wb") as f:
                 downloaded = 0
                 for chunk in r.iter_content(chunk_size=8192):
                     f.write(chunk)
                     downloaded += len(chunk)
-                    if (
-                        total_size > 0 and downloaded % (1024 * 1024 * 5) == 0
-                    ):  # Print a cada 5MB
+                    if total_size > 0 and downloaded % (1024 * 1024 * 5) == 0:  # Print a cada 5MB
                         print(f"Progresso: {downloaded / total_size:.1%}")
 
         print(f"Extraindo {zip_name}...")
-        with zipfile.ZipFile(zip_path, 'r') as z:
+        with zipfile.ZipFile(zip_path, "r") as z:
             z.extractall(RAW_DIR)
         zip_path.unlink()
 
@@ -374,9 +340,7 @@ def main():
     if not prodes_path.exists():
         # A versão (data) muda a cada atualização; pega a mais recente na API.
         catalog = requests.get(TERRABRASILIS_API, timeout=60).json()
-        link = next(
-            d["link"] for d in catalog if re.search(PRODES_LINK_REGEX, d["link"])
-        )
+        link = next(d["link"] for d in catalog if re.search(PRODES_LINK_REGEX, d["link"]))
         name = Path(link).name
         download_and_extract(
             f"https://terrabrasilis.dpi.inpe.br{link}",

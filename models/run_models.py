@@ -95,9 +95,7 @@ def run_moran(gdf, w) -> dict:
 
 def run_ols(gdf, w) -> dict:
     y, X = gdf["dengue_incidence"].values, gdf[PRED_COLS].values
-    vif = pd.DataFrame(
-        {"Feature": PRED_COLS, "VIF": [variance_inflation_factor(X, i) for i in range(X.shape[1])]}
-    )
+    vif = pd.DataFrame({"Feature": PRED_COLS, "VIF": [variance_inflation_factor(X, i) for i in range(X.shape[1])]})
     vif.to_csv(RESULTS_DIR / "ols_vif.csv", index=False)
 
     ols = OLS(y.reshape(-1, 1), X, w=w, name_y="dengue", name_x=PRED_COLS)
@@ -158,9 +156,7 @@ def plot_baseline_diagnostics(gdf, gwr_r2: float) -> None:
     stats = gdf[[f"coef_{n}" for n in names]].describe().T
     significant = gdf[[f"pvalue_{n}" for n in names]].apply(lambda x: (x < 0.05).sum())
     significant.index = [f"coef_{n}" for n in names]
-    pd.concat([stats, significant.rename("sig_count")], axis=1).to_csv(
-        RESULTS_DIR / "gwr_coefficients_summary.csv"
-    )
+    pd.concat([stats, significant.rename("sig_count")], axis=1).to_csv(RESULTS_DIR / "gwr_coefficients_summary.csv")
 
 
 def run_transformed(gdf, w, coords, gwr_r2: float) -> dict:
@@ -224,16 +220,13 @@ def run_paper(gdf, w, coords) -> dict:
     vifs = [variance_inflation_factor(sm.add_constant(X_raw), i) for i in range(1, X_raw.shape[1] + 1)]
     pd.DataFrame(
         {
-            "Name": ["Intercept"]
-            + ["Average log GDP per capita" if n == "log_gdp_capita" else n for n in cols],
+            "Name": ["Intercept"] + ["Average log GDP per capita" if n == "log_gdp_capita" else n for n in cols],
             "Estimate": ols_raw.betas.flatten(),
             "Std.Err": ols_raw.std_err.flatten(),
             "VIF": ["-"] + [round(v, 2) for v in vifs],
         }
     ).to_csv(RESULTS_DIR / "paper_table2_ols.csv", index=False)
-    pd.DataFrame(res_raw.params, columns=["Intercept", *cols]).describe().T.to_csv(
-        RESULTS_DIR / "paper_table3_gwr.csv"
-    )
+    pd.DataFrame(res_raw.params, columns=["Intercept", *cols]).describe().T.to_csv(RESULTS_DIR / "paper_table3_gwr.csv")
 
     metrics = {
         "ols_paper_r2": float(ols_trans.r2),
@@ -267,9 +260,7 @@ def run_hierarchical(gdf) -> dict:
     for label, (y_col, x_cols) in scenarios.items():
         print(f"\n--- Cenário: {label} ---")
         formula = f"{y_col} ~ " + " + ".join(x_cols)
-        state = smf.mixedlm(
-            formula, gdf, groups=gdf["abbrev_state"], re_formula=f"~{x_cols[0]}"
-        ).fit()
+        state = smf.mixedlm(formula, gdf, groups=gdf["abbrev_state"], re_formula=f"~{x_cols[0]}").fit()
         n_params = len(state.fe_params) + len(state.cov_re.values.flatten())
         muni = smf.ols(formula + " + C(abbrev_state)", data=gdf).fit()
         results[label] = {
@@ -295,9 +286,7 @@ def print_summary(moran: dict, metrics: dict[str, dict], hierarchical: dict) -> 
     def fmt(r2, aic) -> str:
         return f"{round(r2, 3) if r2 else 0} ({round(aic, 1) if aic else '-'})"
 
-    print(
-        f"Moran global dengue: {moran['global_moran_i']:.3f} (p={moran['global_moran_p']:.3f})\n"
-    )
+    print(f"Moran global dengue: {moran['global_moran_i']:.3f} (p={moran['global_moran_p']:.3f})\n")
     ols, gwr, trans, paper = (metrics[k] for k in ("ols", "gwr", "trans", "paper"))
     scenarios = [
         ("1. Baseline (Raw)", 9, "raw_9", ols["ols_r2"], ols["ols_aic"], gwr["gwr_r2"], gwr["gwr_aic"]),
