@@ -10,6 +10,7 @@ from pathlib import Path
 import geopandas as gpd
 import libpysal
 import matplotlib.patches as mpatches
+from matplotlib.colors import BoundaryNorm
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -25,6 +26,7 @@ from spreg import OLS
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 
 plt.switch_backend("Agg")  # sem janela: o pipeline só grava figuras
+plt.rcParams["hatch.linewidth"] = 0.4
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_PATH = ROOT / "data" / "processed" / "deforestation_dengue_geo.gpkg"
@@ -44,13 +46,13 @@ LABELS = {
     "std_agri_credit": "Crédito agrícola por área", "std_live_credit": "Crédito pecuário por área",
     "std_crop_area": "Área de lavoura por área", "dengue_incidence_log": "log(1 + incidência de dengue)",
 }  # fmt: skip
-LISA_COLORS = {0: "lightgrey", 1: "red", 2: "lightblue", 3: "blue", 4: "pink"}
+LISA_COLORS = {0: "#f0f0eb", 1: "#e41a1c", 2: "#1fb5f0", 3: "#1b5fd6", 4: "#f7b6bd"}  # cores do artigo (Fig. 3)
 LISA_LABELS = {
-    0: "Não Significativo",
-    1: "Alto-Alto (Hotspot)",
-    2: "Baixo-Alto",
-    3: "Baixo-Baixo (Coldspot)",
-    4: "Alto-Baixo",
+    0: "Não significativo",
+    1: "Alto-Alto (cluster)",
+    2: "Baixo-Alto (outlier)",
+    3: "Baixo-Baixo (cluster)",
+    4: "Alto-Baixo (outlier)",
 }
 
 
@@ -112,10 +114,43 @@ def save_fig(fig, name: str, tight: bool = True, **kwargs) -> None:
     plt.close(fig)
 
 
-def plot_map(gdf, column, ax, cmap, label=None, **kwargs) -> None:
+def frame_map(ax, bounds, decorate) -> None:
+    """Moldura no estilo do artigo: caixa, graticule em graus e, se 'full', seta norte e barra de escala."""
+    xmin, ymin, xmax, ymax = bounds
+    ax.set_xlim(xmin - 0.5, xmax + 0.5)
+    ax.set_ylim(ymin - 0.5, ymax + 0.5)
+    ax.axis("on")
+    if decorate != "full":
+        ax.set_xticks([])
+        ax.set_yticks([])
+        return
+    ax.set_xticks([-70, -60, -50], [f"{-x}°O" for x in (-70, -60, -50)], fontsize=8)
+    ax.set_yticks([-10, 0], ["10°S", "0°"], fontsize=8)
+    km_deg = 111.32 * np.cos(np.radians(10))  # 1° de longitude a ~10°S
+    x0, y0 = xmax - 6, ymin + 0.4
+    ax.plot([x0, x0 + 500 / km_deg], [y0, y0], "k-", lw=3, solid_capstyle="butt")
+    ax.text(x0 + 250 / km_deg, y0 + 0.4, "500 km", ha="center", fontsize=8)
+    ax.annotate("N", xy=(xmin + 1.5, ymax - 0.2), xytext=(xmin + 1.5, ymax - 2.8), ha="center", fontsize=10,
+                arrowprops={"arrowstyle": "-|>", "color": "k"})  # fmt: skip
+
+
+def plot_map(gdf, column, ax, cmap, label=None, bins=None, extend="neither", decorate="box", **kwargs) -> None:
+    """Mapa coroplético; com `bins`, classes discretas como nas figuras do artigo."""
+    legend_kwds = {"label": label, "shrink": 0.7}
+    if bins is not None:
+        n_colors = len(bins) - 1 + (2 if extend == "both" else 0)
+        cmap = plt.get_cmap(cmap, n_colors)
+        kwargs["norm"] = BoundaryNorm(bins, n_colors, extend=extend)
+        legend_kwds["extend"] = extend
     gdf.plot(column=column, cmap=cmap, legend=True, ax=ax, edgecolor="black", linewidth=0.1,
-             legend_kwds={"label": label, "shrink": 0.7}, **kwargs)  # fmt: skip
-    ax.axis("off")
+             legend_kwds=legend_kwds, **kwargs)  # fmt: skip
+    frame_map(ax, gdf.total_bounds, decorate)
+
+
+def r2_bins(*values):
+    low = np.floor(min(v.min() for v in values) * 10) / 10
+    high = np.ceil(max(v.max() for v in values) * 10) / 10
+    return np.round(np.arange(low, high + 0.05, 0.1), 1)
 
 
 def with_gdp_log(cols: list[str]) -> list[str]:
@@ -135,16 +170,25 @@ def run_moran(gdf, w) -> dict:
     for q in (1, 2, 3, 4):
         gdf.loc[(lisa.q == q) & significant, "lisa_cluster"] = q
 
-    fig, ax = plt.subplots(figsize=(10, 8))
+    fig, (ax, ax_moran) = plt.subplots(1, 2, figsize=(16, 7), gridspec_kw={"width_ratios": [2.2, 1]})
     patches = []
     for cluster, color in LISA_COLORS.items():
         subset = gdf[gdf["lisa_cluster"] == cluster]
         if not subset.empty:
-            subset.plot(ax=ax, color=color, edgecolor="black", linewidth=0.1)
-            patches.append(mpatches.Patch(color=color, label=f"{LISA_LABELS[cluster]} (n = {len(subset)})"))
-    ax.legend(handles=patches, loc="lower left", title="Clusters LISA")
-    ax.set_title(f"Clusters LISA da incidência de dengue (I de Moran global = {mi.I:.3f}; p < 0.05)")
-    ax.axis("off")
+            subset.plot(ax=ax, color=color, edgecolor="black", linewidth=0.15)
+            patches.append(mpatches.Patch(facecolor=color, edgecolor="black", label=f"{LISA_LABELS[cluster]} (n = {len(subset)})"))
+    ax.legend(handles=patches, loc="lower left", title="Legenda", fontsize=9, fancybox=False, edgecolor="black")
+    ax.set_title(f"Índice local de associação espacial (LISA) da incidência de dengue\n(I de Moran global = {mi.I:.3f}; p < 0.05)")
+    frame_map(ax, gdf.total_bounds, "full")
+
+    lag = libpysal.weights.lag_spatial(w, lisa.z)
+    ax_moran.scatter(lisa.z, lag, c=gdf["lisa_cluster"].map(LISA_COLORS), s=14, edgecolor="none")
+    ax_moran.axhline(0, color="k", lw=0.8)
+    ax_moran.axvline(0, color="k", lw=0.8)
+    line = np.array([lisa.z.min(), lisa.z.max()])
+    ax_moran.plot(line, mi.I * line, "k--", lw=1, label=f"inclinação = I = {mi.I:.3f}")
+    ax_moran.set(title="Diagrama de Moran", xlabel="Incidência (z-score)", ylabel="Média dos vizinhos (z-score)")
+    ax_moran.legend(loc="upper left", fontsize=9)
     save_fig(fig, "07_lisa_clusters.png", tight=False, bbox_inches="tight")
     return metrics
 
@@ -211,7 +255,7 @@ def plot_baseline_diagnostics(gdf, gwr_r2: float) -> None:
     fig, axes = plt.subplots(1, 2, figsize=(14, 6))
     gdf["r2_local_gwr"].hist(bins=30, ax=axes[0], edgecolor="k", grid=False)
     axes[0].set(title="Distribuição do R² local", xlabel="R² local", ylabel="Municípios")
-    plot_map(gdf, "r2_local_gwr", axes[1], "YlOrBr", "R² local")
+    plot_map(gdf, "r2_local_gwr", axes[1], "YlOrBr", "R² local", bins=r2_bins(gdf["r2_local_gwr"]))
     axes[1].set_title("R² local por município")
     fig.suptitle(f"Cenário A: GWR adaptativo (bisquare), 9 variáveis, escala original (R² global = {gwr_r2:.3f})")
     save_fig(fig, "09_gwr_r2_local.png")
@@ -244,11 +288,11 @@ def run_transformed(gdf, w, coords, gwr_r2: float) -> dict:
     gdf["r2_local_gwr_transformed"] = results.localR2
 
     base, trans = gdf["r2_local_gwr"], gdf["r2_local_gwr_transformed"]
-    limits = {"vmin": min(base.min(), trans.min()), "vmax": max(base.max(), trans.max())}
+    bins = r2_bins(base, trans)
     fig, axes = plt.subplots(1, 2, figsize=(16, 7))
-    plot_map(gdf, "r2_local_gwr", axes[0], "YlOrBr", "R² local", **limits)
+    plot_map(gdf, "r2_local_gwr", axes[0], "YlOrBr", "R² local", bins=bins)
     axes[0].set_title(f"A. escala original (R² global = {gwr_r2:.3f})")
-    plot_map(gdf, "r2_local_gwr_transformed", axes[1], "YlOrBr", "R² local", **limits)
+    plot_map(gdf, "r2_local_gwr_transformed", axes[1], "YlOrBr", "R² local", bins=bins)
     axes[1].set_title(f"B. log(1 + x) e z-score (R² global = {float(results.R2):.3f})")
     fig.suptitle("R² local do GWR adaptativo (bisquare), 9 variáveis, na mesma escala de cores")
     save_fig(fig, "11_gwr_r2_comparison.png")
@@ -266,23 +310,36 @@ def run_transformed(gdf, w, coords, gwr_r2: float) -> dict:
 
 
 def plot_paper_gwr(gdf, results) -> None:
-    """R² local e coeficientes locais (desmatamento, PIB per capita) do GWR fixo da reprodução do artigo."""
-    panels = {
-        "R² local": results.localR2,
-        "Coeficiente local do desmatamento (por área)": results.params[:, 1],
-        "Coeficiente local do PIB per capita": results.params[:, 4],
+    """Cenário C no formato das Figs. 5 a 9 do artigo: R² local; coeficientes (A) e p-valores (B) por variável."""
+    r2 = results.localR2
+    fig, ax = plt.subplots(figsize=(9, 7))
+    gdf["_v"] = r2
+    plot_map(gdf, "_v", ax, "YlOrBr", "R² local", bins=r2_bins(r2), decorate="full")
+    ax.set_title("Cenário C: R² local do GWR gaussiano fixo (4 variáveis, escala original)")
+    save_fig(fig, "12_paper_gwr_r2.png")
+
+    variables = {  # título: (coluna em params/tvalues, fator de unidade, unidade do coeficiente)
+        "Desmatamento": (1, 1, "por km²/km²"),
+        "Crédito agrícola": (2, 1000, "por mil R$/km²"),
+        "Crédito pecuário": (3, 1000, "por mil R$/km²"),
+        "PIB per capita": (4, 1, "por mil R$/hab."),
     }
-    fig, axes = plt.subplots(1, 3, figsize=(18, 6))
-    for ax, (title, values) in zip(axes, panels.items()):
-        gdf["_v"] = values
-        lo, hi = np.percentile(values, [5, 95])  # corta os extremos para a escala não ser dominada por outliers
-        if title != "R² local":  # coeficientes: escala simétrica, para o branco marcar o zero
-            lo, hi = -max(abs(lo), abs(hi)), max(abs(lo), abs(hi))
-        plot_map(gdf, "_v", ax, "YlOrBr" if title == "R² local" else "RdBu_r", title.split(" (")[0], vmin=lo, vmax=hi)
-        ax.set_title(title)
+    p_bins = [0, 0.01, 0.05, 0.1, 0.2, 0.4, 0.6, 0.8, 1.0]
+    fig, axes = plt.subplots(2, 4, figsize=(22, 9))
+    for col, (title, (k, factor, unit)) in enumerate(variables.items()):
+        gdf["_v"] = results.params[:, k] * factor
+        limit = np.percentile(np.abs(gdf["_v"]), 95)  # extremos agrupados nas classes das pontas
+        plot_map(gdf, "_v", axes[0, col], "RdBu_r", f"Coeficiente ({unit})", bins=np.linspace(-limit, limit, 9), extend="both")
+        axes[0, col].set_title(title)
+        gdf["_v"] = 2 * norm.sf(np.abs(results.tvalues[:, k]))
+        plot_map(gdf, "_v", axes[1, col], "YlGn", "p-valor", bins=p_bins)
+        for row, letter in enumerate("AB"):
+            axes[row, col].text(0.03, 0.04, letter, transform=axes[row, col].transAxes, fontsize=14,
+                                fontweight="bold", bbox={"facecolor": "white", "edgecolor": "black"})  # fmt: skip
     gdf.drop(columns="_v", inplace=True)
-    fig.suptitle("Cenário C: GWR gaussiano fixo, 4 variáveis, escala original (cores truncadas nos percentis 5 e 95)")
-    save_fig(fig, "12_paper_gwr_local.png")
+    fig.suptitle("Cenário C: (A) coeficientes locais do GWR e (B) p-valores (aproximação normal); nos coeficientes, "
+                 "as classes das pontas reúnem os valores acima do percentil 95 de |coef.|")
+    save_fig(fig, "13_paper_gwr_coef_pvalues.png")
 
 
 def run_paper(gdf, w, coords) -> dict:

@@ -171,22 +171,35 @@ variáveis brutas, dá R² ajustado de apenas 0,44 pela fórmula do GWmodel).
 
 ## Figuras
 
-**Clusters LISA da incidência de dengue.** Hotspots em MT e AC; coldspots em MA e PA.
+Os mapas e a matriz de correlação seguem o estilo das figuras do artigo (moldura, classes discretas de cor, painéis A/B).
+
+**Clusters LISA da incidência de dengue** (cores e classes da Fig. 3 do artigo) e diagrama de Moran. Hotspots em MT e
+AC; coldspots em MA e PA.
 
 ![Clusters LISA](figures/07_lisa_clusters.png)
 
-**Cenário C: R² local e coeficientes locais do GWR do artigo** (cores truncadas nos percentis 5 e 95; escala dos
-coeficientes simétrica, branco = zero). O coeficiente do desmatamento muda de sinal no espaço.
+**Cenário C, coeficientes locais (A) e p-valores (B) do GWR do artigo**, no formato das Figs. 6 a 9. Os p-valores usam a
+aproximação normal dos t locais, sem correção para múltiplas comparações; os coeficientes dos créditos estão em mil R$/km².
 
-![GWR local da reprodução do artigo](figures/12_paper_gwr_local.png)
+![Coeficientes e p-valores do GWR](figures/13_paper_gwr_coef_pvalues.png)
+
+**Cenário C, R² local** (Fig. 5 do artigo).
+
+![R² local do cenário C](figures/12_paper_gwr_r2.png)
 
 **R² local do GWR adaptativo nos cenários A (original) e B (log1p + z-score), na mesma escala de cores.**
 
 ![R² local por cenário](figures/11_gwr_r2_comparison.png)
 
-Também em `figures/`: distribuições e boxplots em escala log (01, 02), correlações (03 original; 10 após a
-transformação do cenário B), dispersões (04), mapas exploratórios (05, 06), resíduos do OLS do cenário A (08) e R²
-local do cenário A (09). Todas as figuras têm título, eixos e unidades em português.
+**Correlações: este repositório (abaixo da diagonal) e artigo (acima, Fig. 4).** Os valores do artigo foram lidos da
+figura; alguns são tênues no PDF, então pode haver diferença de 0,01 a 0,02.
+
+![Correlações contra o artigo](figures/14_correlation_vs_paper.png)
+
+Também em `figures/`: distribuições com mediana (01) e boxplots em escala log (02), matriz de correlação (03),
+dispersões com tendência LOWESS e ρ de Spearman (04), mapas exploratórios e dos preditores em escala de potência (05, 06),
+resíduos do OLS do cenário A (08), R² local do cenário A (09) e correlação após a transformação do cenário B (10).
+Todas as figuras têm título, eixos e unidades em português.
 
 ## Como executar
 
@@ -210,7 +223,7 @@ Tempo total aproximado de 40 s, pico de 1,7 GB de RAM, com os dados brutos já b
 ```
 etl/01_download_data.py      download das fontes brutas em data/raw/
 etl/02_preprocess_data.py    base municipal em data/processed/ (CSV e GPKG)
-eda/03_eda_pre_modeling.py   estatísticas e figuras 01 a 06
-models/run_models.py         modelos, métricas em data/results/ e figuras 07 a 12
+eda/03_eda_pre_modeling.py   estatísticas e figuras 01 a 06 e 14
+models/run_models.py         modelos, métricas em data/results/ e figuras 07 a 13
 README_original.md           README anterior a esta revisão, para comparação
 ```

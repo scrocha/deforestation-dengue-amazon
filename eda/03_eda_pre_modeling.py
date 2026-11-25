@@ -7,6 +7,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from matplotlib.colors import PowerNorm
+from scipy.stats import spearmanr
+from statsmodels.nonparametric.smoothers_lowess import lowess
 
 plt.switch_backend("Agg")  # sem janela: o pipeline só grava figuras
 
@@ -82,11 +85,14 @@ def plot_distributions(df):
     fig, axes = panel_grid(MODEL_VARS, 4, 3)
     for ax, col in zip(axes, MODEL_VARS):
         df[col].hist(ax=ax, bins=40, edgecolor="k", color="lightblue", grid=False)
+        median = df[col].median()
+        ax.axvline(median, color="crimson", ls="--", lw=1)
+        ax.text(0.97, 0.92, f"mediana = {median:.4g}", transform=ax.transAxes, ha="right", fontsize=8, color="crimson")
         ax.set_title(short(col), fontsize=10)
         ax.set_xlabel(unit(col))
         ax.set_ylabel("Municípios")
         hide_spines(ax)
-    fig.suptitle("Distribuição das variáveis (560 municípios)")
+    fig.suptitle("Distribuição das variáveis (560 municípios; linha tracejada = mediana)")
     save(fig, "01_distributions.png")
 
     # Escalas muito diferentes: boxplot em log(1+x) para que todas as variáveis sejam legíveis.
@@ -99,54 +105,105 @@ def plot_distributions(df):
     save(fig, "02_boxplots.png")
 
 
+# Variáveis e ordem da Fig. 4 do artigo (resposta primeiro)
+PAPER_ORDER = ["dengue_incidence", "std_deforestation", "std_agri_credit", "std_live_credit", "gdp_capita",
+               "std_rural_pop", "std_urban_pop", "dist_roads", "average_min_precipitation", "std_crop_area"]  # fmt: skip
+# Correlações lidas da Fig. 4 do artigo (n = 550), por par (linha, coluna) na ordem acima
+PAPER_CORR = {
+    (1, 0): 0.18, (2, 0): 0.36, (2, 1): 0.05, (3, 0): 0.25, (3, 1): 0.06, (3, 2): 0.30, (4, 0): 0.36, (4, 1): 0.07,
+    (4, 2): 0.60, (4, 3): 0.26, (5, 0): -0.20, (5, 1): 0.06, (5, 2): -0.18, (5, 3): -0.28, (5, 4): -0.16,
+    (6, 0): -0.04, (6, 1): -0.01, (6, 2): -0.05, (6, 3): -0.10, (6, 4): 0.07, (6, 5): 0.17, (7, 0): -0.02,
+    (7, 1): -0.05, (7, 2): -0.08, (7, 3): -0.11, (7, 4): -0.10, (7, 6): -0.03, (8, 0): -0.15, (8, 1): -0.11,
+    (8, 2): -0.21, (8, 3): -0.26, (8, 4): -0.19, (8, 5): 0.14, (8, 6): 0.06, (8, 7): 0.50, (9, 0): 0.34,
+    (9, 1): 0.04, (9, 2): 0.70, (9, 3): 0.09, (9, 4): 0.54, (9, 5): -0.14, (9, 6): -0.03, (9, 7): -0.11,
+    (9, 8): -0.22,
+}  # fmt: skip
+
+
+def corr_triangle(matrix, ax, title, annot):
+    """Triângulo inferior no estilo da Fig. 4 do artigo: diagonal incluída, escala fixa de -1 a 1, barra horizontal."""
+    names = [short(c).replace("\n", " ") for c in PAPER_ORDER]
+    sns.heatmap(
+        pd.DataFrame(matrix, index=names, columns=names), mask=np.triu(np.ones_like(matrix, dtype=bool), k=1),
+        annot=annot, fmt=".2f", cmap="RdBu", vmin=-1, vmax=1, linewidths=0.5, linecolor="lightgrey", ax=ax,
+        cbar_kws={"orientation": "horizontal", "shrink": 0.6, "pad": 0.27, "label": "Correlação de Pearson"},
+    )  # fmt: skip
+    ax.set_title(title)
+
+
 def plot_correlation(df):
-    corr = df[MODEL_VARS].corr().rename(index=lambda c: short(c).replace("\n", " "), columns=lambda c: short(c).replace("\n", " "))
-    corr = corr.iloc[1:, :-1]  # sem a diagonal nem o triângulo superior
+    data = df[PAPER_ORDER].copy()
+    data["dist_roads"] = data["dist_roads"].fillna(data["dist_roads"].median())  # como nos modelos
+    ours = data.corr().values
+
+    fig, ax = plt.subplots(figsize=(10, 9))
+    corr_triangle(ours, ax, "Matriz de correlação (560 municípios)", annot=True)
+    save(fig, "03_correlation_matrix.png")
+
+    # Comparação com o artigo: triângulo inferior = este repositório; superior = Fig. 4 do artigo
+    combined = ours.copy()
+    for (i, j), value in PAPER_CORR.items():
+        combined[j, i] = value
+    names = [short(c).replace("\n", " ") for c in PAPER_ORDER]
     fig, ax = plt.subplots(figsize=(11, 9))
     sns.heatmap(
-        corr, mask=np.triu(np.ones_like(corr, dtype=bool), k=1), annot=True, fmt=".2f", cmap="RdBu_r", center=0,
-        cbar_kws={"label": "Correlação de Pearson"}, ax=ax,
-    )
-    ax.set_title("Correlação entre as variáveis (560 municípios)")
-    save(fig, "03_correlation_matrix.png")
+        pd.DataFrame(combined, index=names, columns=names), annot=True, fmt=".2f", cmap="RdBu", vmin=-1, vmax=1,
+        linewidths=0.5, linecolor="lightgrey", ax=ax,
+        cbar_kws={"orientation": "horizontal", "shrink": 0.6, "pad": 0.12, "label": "Correlação de Pearson"},
+    )  # fmt: skip
+    ax.set_title("Correlações: este repositório (abaixo da diagonal, n = 560) e artigo (acima, Fig. 4, n = 550)")
+    ax.xaxis.tick_top()
+    plt.setp(ax.get_xticklabels(), rotation=45, ha="left")
+    save(fig, "14_correlation_vs_paper.png")
 
 
 def plot_scatters(df):
     predictors = [c for c in MODEL_VARS if c != "dengue_incidence"]
     fig, axes = panel_grid(predictors, 5, 3.5)
     for ax, col in zip(axes, predictors):
-        ax.scatter(df[col], df["dengue_incidence"], alpha=0.3, s=15, color="steelblue")
+        valid = df[col].notna()  # dist_roads é ausente onde não há desmatamento
+        x, y = df.loc[valid, col], df.loc[valid, "dengue_incidence"]
+        ax.scatter(x, y, alpha=0.3, s=15, color="steelblue")
+        trend = lowess(y, x, frac=0.6)  # tendência sem supor reta e sem extrapolar abaixo de zero
+        ax.plot(trend[:, 0], trend[:, 1], color="crimson", lw=1.8)
+        positive = x[x > 0]
+        ax.set_xscale("symlog", linthresh=positive.quantile(0.1) if len(positive) else 1)  # linear perto de 0, log acima
+        rho = spearmanr(x, y)[0]
+        ax.text(0.97, 0.92, f"ρ = {rho:.2f}", transform=ax.transAxes, ha="right", fontsize=9)
         ax.set_title(short(col), fontsize=10)
         ax.set_xlabel(unit(col))
         ax.set_ylabel("Dengue (casos/100 mil)")
-        fit = np.poly1d(np.polyfit(df[col].fillna(0), df["dengue_incidence"], 1))
-        x = np.linspace(df[col].min(), df[col].max(), 100)
-        ax.plot(x, fit(x), "r--", lw=1.5)
         hide_spines(ax)
-    fig.suptitle("Incidência de dengue contra cada preditor (linha tracejada: ajuste linear)")
+    fig.suptitle("Incidência de dengue contra cada preditor (eixo x simétrico-log; vermelho = LOWESS; ρ = Spearman)")
     save(fig, "04_scatter_plots.png")
+
+
+def map_panel(gdf, col, ax, cmap, label=None, gamma=0.5, **kwargs):
+    """Mapa com escala de cores em raiz quadrada (variáveis assimétricas) e dado ausente em cinza."""
+    values = gdf[col].dropna()
+    gdf.plot(
+        column=col, cmap=cmap, norm=PowerNorm(gamma, vmin=values.min(), vmax=values.max()), legend=True,
+        edgecolor="black", linewidth=0.1, ax=ax, legend_kwds={"label": label, "shrink": 0.6},
+        missing_kwds={"color": "lightgrey"}, **kwargs,
+    )  # fmt: skip
+    ax.axis("off")
 
 
 def plot_maps(gdf):
     fig, axes = plt.subplots(1, 2, figsize=(16, 7))
     for ax, col in zip(axes, ["dengue_incidence", "avg_deforestation"]):
-        gdf.plot(column=col, cmap="YlOrBr", legend=True, edgecolor="black", linewidth=0.2, ax=ax,
-                 legend_kwds={"label": LABELS[col], "shrink": 0.6})  # fmt: skip
+        map_panel(gdf, col, ax, "YlOrBr", LABELS[col])
         ax.set_title(short(col).replace("\n", " "))
-        ax.axis("off")
+    fig.suptitle("Escala de cores em raiz quadrada, que realça diferenças entre valores baixos")
     save(fig, "05_exploratory_map.png")
 
     predictors = [c for c in MODEL_VARS if c not in ["dengue_incidence", "avg_deforestation", "std_deforestation"]]
     fig, axes = panel_grid(predictors, 6, 4)
     for ax, col in zip(axes, predictors):
-        vmin, vmax = gdf[col].quantile([0.05, 0.95])
-        limits = {} if vmin == vmax else {"vmin": vmin, "vmax": vmax}
         cmap = "Greens" if any(key in col for key in ("precipitation", "crop", "agri")) else "YlOrBr"
-        gdf.plot(column=col, cmap=cmap, legend=True, edgecolor="black", linewidth=0.1, ax=ax,
-                 legend_kwds={"shrink": 0.6}, **limits)  # fmt: skip
+        map_panel(gdf, col, ax, cmap, gamma=0.3)
         ax.set_title(short(col), fontsize=10)
-        ax.axis("off")
-    fig.suptitle("Preditores por município (escala de cores truncada nos percentis 5 e 95)")
+    fig.suptitle("Preditores por município (escala de cores em potência 0,3, que realça diferenças entre valores baixos; cinza = sem dado)")
     save(fig, "06_predictors_maps.png")
 
 
