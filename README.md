@@ -160,15 +160,6 @@ Também em `figures/`: distribuições e boxplots em escala log (01, 02), correl
 transformação do cenário B), dispersões (04), mapas exploratórios (05, 06), resíduos do OLS do cenário A (08) e R²
 local do cenário A (09). Todas as figuras têm título, eixos e unidades em português.
 
-## Limitações
-
-- Estudo ecológico, de associação: os resultados não permitem inferência causal nem individual.
-- A base é reconstruída; as diferenças de definição de dengue e de crédito não podem ser resolvidas sem os dados originais.
-- A incidência de dengue por município é uma média de seis anos, e os coeficientes de GWR são exploratórios (sem
-  correção para múltiplas comparações) e sensíveis à banda.
-- O R² do GWR contém sobreajuste por construção; só o AICc e o R² ajustado penalizam a flexibilidade.
-- O artigo não informa núcleo e banda, e o gaussiano fixo é uma escolha empírica, não confirmada pelos autores.
-
 ## Como executar
 
 ```bash
@@ -184,7 +175,7 @@ uv run python eda/03_eda_pre_modeling.py
 uv run python models/run_models.py
 ```
 
-Tempo total aproximado de 40 s, pico de 1,7 GB de RAM, com os dados brutos já baixados (ver `PERF.md`).
+Tempo total aproximado de 40 s, pico de 1,7 GB de RAM, com os dados brutos já baixados.
 
 ## Estrutura
 
@@ -193,6 +184,5 @@ etl/01_download_data.py      download das fontes brutas em data/raw/
 etl/02_preprocess_data.py    base municipal em data/processed/ (CSV e GPKG)
 eda/03_eda_pre_modeling.py   estatísticas e figuras 01 a 06
 models/run_models.py         modelos, métricas em data/results/ e figuras 07 a 12
-PERF.md                      registro de otimizações
 README_original.md           README anterior a esta revisão, para comparação
 ```
