@@ -236,5 +236,4 @@ etl/01_download_data.py      download das fontes brutas em data/raw/
 etl/02_preprocess_data.py    base municipal em data/processed/ (CSV e GPKG)
 eda/03_eda_pre_modeling.py   estatísticas e figuras 01 a 06 e 14
 models/run_models.py         modelos, métricas em data/results/ e figuras 07 a 13
-README_original.md           README anterior a esta revisão, para comparação
 ```
