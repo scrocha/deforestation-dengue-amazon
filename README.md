@@ -93,13 +93,25 @@ Este repositório implementa um fluxo completo de:
 | Moran dos resíduos do OLS | 0,359 | 0,366 (resposta anual) / 0,379 |
 | OLS (4 variáveis, escala bruta) R² | 0,20 | 0,186 (ajustado 0,180) |
 | VIF das 4 variáveis | 1,006 / 1,621 / 1,111 / 1,583 | 1,01 / 1,33 / 1,02 / 1,32 |
-| GWR R² (ajustado, segundo o resumo) | 0,70 (AIC 7519) | 0,513 (ajustado 0,458) com bisquare adaptativo e AICc |
+| GWR: AIC do OLS → GWR (Δ, independe da escala de y) | 7949 → 7519 (Δ −430) | Δ AICc = −437 (gaussiano fixo, AICc) |
+| GWR: R² ajustado (fórmula do GWmodel) | 0,70 | 0,741 (R² global 0,839; banda 103 km) |
 | Clusters Alto-Alto | dois, no sul do bioma (69 municípios) | MT e AC (50 municípios) |
 
-O OLS e a autocorrelação reproduzem bem. O GWR não reproduz o R² de 0,70: o artigo usou R (GWmodel) sem
-informar kernel nem critério de banda. Em testes com a especificação do artigo, o núcleo gaussiano fixo dá
-R² ajustado de 0,58 (CV) a 0,77 (AICc), o bisquare adaptativo 0,46 a 0,49, ou seja, o resultado depende
-da escolha da banda. Os AIC não são comparáveis porque a escala da resposta difere.
+**GWR.** O artigo usou R (GWmodel) sem informar kernel nem critério de banda. O núcleo gaussiano (ou exponencial)
+**fixo, com banda por AICc**, reproduz o artigo: Δ AICc de −437 (−430 no exponencial) contra −430, R² ajustado de
+0,74 contra 0,70, e os quartis dos coeficientes locais (Tabela 3) são próximos para desmatamento (Q1 −7,9 mil vs
+−7,0 mil; mediana 4,9 mil vs 4,1 mil), PIB per capita (mediana 1,79 vs 1,71) e intercepto (mediana 71 vs 82). O
+bisquare adaptativo, usado no baseline, dá R² ajustado de 0,46. Por isso os cenários 3 e 4 usam GWR fixo gaussiano
+(`fit_gwr_fixed`); os cenários 1 e 2 mantêm o bisquare adaptativo.
+
+**Dados (matriz de correlação da Fig. 4).** Erro absoluto médio de 0,07 nas 45 correlações de Pearson. Batem:
+dengue~crédito agrícola (0,36), dengue~PIB (0,36), dengue~desmatamento (0,17 vs 0,18), dengue~área plantada
+(0,37 vs 0,34), precipitação~crédito (−0,24 vs −0,21). Não batem: crédito pecuário (dengue 0,09 vs 0,25; com
+crédito agrícola 0,12 vs 0,30), população rural~crédito pecuário (−0,05 vs −0,28), `dist_roads` (nenhum período
+testado reproduz; o artigo usa 2019–2021), área plantada~crédito agrícola (0,96 vs 0,70). Com crédito agrícola
+**per capita** a correlação PIB~crédito agrícola fica 0,60 e os VIFs 1,57/1,60, iguais ao artigo (1,62/1,58), o que
+sugere que a padronização "por área" descrita no artigo não é a realmente usada. Os dados originais não estão
+disponíveis, então essas diferenças não podem ser resolvidas.
 
 ## Métricas principais (execução atual)
 
@@ -113,8 +125,8 @@ Comparação consolidada (`data/results/10_final_model_comparison.csv`):
 |---|---:|---|---:|---:|---:|---:|
 | 1. Baseline | 9 | Nenhuma (Raw) | 0,179 | 4145,9 | 0,506 | 3963,7 |
 | 2. Transformado Otimizado | 9 | Log1p(y) e Log1p/Norm(X) | 0,466 | 1340,5 | 0,656 | 1207,9 |
-| 3. Reprodução Paper (Original) | 4 | Nenhuma (Escala Raw) | 0,186 | 4130,8 | 0,513 | 3948,6 |
-| 4. Reprodução Paper (Transf) | 4 | Log1p(y) e Z-Score(X) | 0,266 | 1508,5 | 0,612 | 1257,2 |
+| 3. Reprodução Paper (Original, GWR fixo) | 4 | Nenhuma (Escala Raw) | 0,186 | 4130,8 | 0,839 | 3549,0 |
+| 4. Reprodução Paper (Transf, GWR fixo) | 4 | Log1p(y) e Z-Score(X) | 0,266 | 1508,5 | 0,743 | 1132,5 |
 
 ## Figuras relevantes
 

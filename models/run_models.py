@@ -19,6 +19,7 @@ import statsmodels.formula.api as smf
 from esda.moran import Moran, Moran_Local
 from mgwr.gwr import GWR
 from mgwr.search import golden_section
+from mgwr.sel_bw import Sel_BW
 from scipy.stats import norm
 from spreg import OLS
 from statsmodels.stats.outliers_influence import variance_inflation_factor
@@ -75,6 +76,18 @@ def fit_gwr(coords: np.ndarray, y: np.ndarray, X: np.ndarray):
         40 + 2 * (X.shape[1] + 1), len(y), 0.38197, lambda b: gwr_aicc(coords, y, X, int(b)), 1e-6, 200, None, True
     )[0]
     return bw, GWR(coords, y, X, bw, kernel="bisquare", fixed=False).fit()
+
+
+def fit_gwr_fixed(coords: np.ndarray, y: np.ndarray, X: np.ndarray):
+    """GWR com núcleo gaussiano fixo e banda (m) por AICc, como no GWmodel usado pelo artigo."""
+    bw = Sel_BW(coords, y, X, kernel="gaussian", fixed=True).search(criterion="AICc")
+    return bw, GWR(coords, y, X, bw, kernel="gaussian", fixed=True).fit()
+
+
+def gwmodel_adj_r2(results, n: int) -> float:
+    """R² ajustado do GWmodel: parâmetros efetivos = 2 tr(S) - tr(S'S)."""
+    enp = 2 * results.tr_S - results.tr_STS
+    return float(1 - (1 - results.R2) * (n - 1) / (n - enp - 1))
 
 
 def plot_map(gdf, column, ax, cmap, **kwargs) -> None:
@@ -230,7 +243,7 @@ def run_transformed(gdf, w, coords, gwr_r2: float) -> dict:
 
 
 def run_paper(gdf, w, coords) -> dict:
-    """Reprodução do artigo: 4 variáveis, versões transformada e bruta."""
+    """Reprodução do artigo: 4 variáveis, versões transformada e bruta, GWR gaussiano fixo (AICc)."""
     cols = PAPER_COLS  # como na Tabela 2 do artigo: PIB per capita sem log
     X_raw = gdf[cols].values.astype(float)
     y_raw = gdf["dengue_incidence"].values.astype(float).reshape(-1, 1)
@@ -238,10 +251,13 @@ def run_paper(gdf, w, coords) -> dict:
     X_std += RNG.normal(0, 1e-10, X_std.shape)
     y_trans = np.log1p(y_raw)
 
+    n = len(y_raw)
     ols_trans = OLS(y_trans, X_std, w=w, name_y="dengue", name_x=cols)
-    _, res_trans = fit_gwr(coords, y_trans, X_std)
+    _, res_trans = fit_gwr_fixed(coords, y_trans, X_std)
     ols_raw = OLS(y_raw, X_raw, w=w, name_y="dengue", name_x=cols)
-    _, res_raw = fit_gwr(coords, y_raw, X_raw)
+    bw_raw, res_raw = fit_gwr_fixed(coords, y_raw, X_raw)
+    k = len(cols) + 1
+    delta_aicc = float(res_raw.aicc - (ols_raw.aic + 2 * k * (k + 1) / (n - k - 1)))
 
     vifs = [variance_inflation_factor(sm.add_constant(X_raw), i) for i in range(1, X_raw.shape[1] + 1)]
     pd.DataFrame(
@@ -264,6 +280,9 @@ def run_paper(gdf, w, coords) -> dict:
         "ols_raw_paper_aic": float(ols_raw.aic),
         "gwr_raw_paper_r2": float(res_raw.R2),
         "gwr_raw_paper_adj_r2": float(res_raw.adj_R2),
+        "gwr_raw_paper_adj_r2_gwmodel": gwmodel_adj_r2(res_raw, n),
+        "gwr_raw_paper_delta_aicc_vs_ols": delta_aicc,
+        "gwr_raw_paper_bw_km": float(bw_raw) / 1000,
         "ols_raw_paper_adj_r2": float(ols_raw.ar2),
         "gwr_raw_paper_aic": float(res_raw.aic),
     }
@@ -321,9 +340,9 @@ def print_summary(moran: dict, metrics: dict[str, dict], hierarchical: dict) -> 
         ("1. Baseline (Raw)", 9, "raw_9", ols["ols_r2"], ols["ols_aic"], gwr["gwr_r2"], gwr["gwr_aic"]),
         ("2. Transformado Otimizado", 9, "trans_9", trans["ols_trans_r2"], trans["ols_trans_aic"],
          trans["gwr_trans_r2"], trans["gwr_trans_aic"]),
-        ("3. Paper (Raw)", 4, "raw_4", paper["ols_raw_paper_r2"], paper["ols_raw_paper_aic"],
+        ("3. Paper (Raw, GWR fixo)", 4, "raw_4", paper["ols_raw_paper_r2"], paper["ols_raw_paper_aic"],
          paper["gwr_raw_paper_r2"], paper["gwr_raw_paper_aic"]),
-        ("4. Paper (Transformado)", 4, "trans_4", paper["ols_paper_r2"], paper["ols_paper_aic"],
+        ("4. Paper (Transf, GWR fixo)", 4, "trans_4", paper["ols_paper_r2"], paper["ols_paper_aic"],
          paper["gwr_paper_r2"], paper["gwr_paper_aic"]),
     ]  # fmt: skip
     rows = []
