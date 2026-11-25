@@ -43,13 +43,7 @@ Este repositório implementa um fluxo completo de:
 
 ### Modelagem
 
-- models/04_moran.py: Moran global e LISA (clusters locais).
-- models/05_ols.py: OLS baseline com 9 preditores, VIF e Moran dos resíduos.
-- models/06_gwr.py: GWR baseline (kernel bisquare, banda por AICc).
-- models/07_comparison.py: gráficos de diagnóstico e resumo dos coeficientes locais.
-- models/08_transformations.py: cenário com transformações (log1p e normalização).
-- models/09_paper_reproduction.py: reprodução com as 4 variáveis centrais do paper.
-- models/10_final_summary.py: consolidação final das métricas.
+- models/run_models.py: Moran/LISA, OLS (VIF), GWR (bisquare, AICc), cenário transformado, reprodução do paper (4 variáveis), modelos hierárquicos e resumo final das métricas.
 
 ## Dados utilizados
 
@@ -143,11 +137,5 @@ Execução por etapas:
 uv run python3 etl/01_download_data.py
 uv run python3 etl/02_preprocess_data.py
 uv run python3 eda/03_eda_pre_modeling.py
-uv run python3 models/04_moran.py
-uv run python3 models/05_ols.py
-uv run python3 models/06_gwr.py
-uv run python3 models/07_comparison.py
-uv run python3 models/08_transformations.py
-uv run python3 models/09_paper_reproduction.py
-uv run python3 models/10_final_summary.py
+uv run python3 models/run_models.py
 ```
