@@ -114,6 +114,7 @@ def with_gdp_log(cols: list[str]) -> list[str]:
 
 
 def run_moran(gdf, w) -> dict:
+    np.random.seed(42)  # as permutações do Moran usam o RNG global; fixa os clusters LISA entre execuções
     mi = Moran(gdf["dengue_incidence"], w)
     metrics = {"global_moran_i": float(mi.I), "global_moran_p": float(mi.p_sim)}
     save_json(metrics, "moran_metrics.json")

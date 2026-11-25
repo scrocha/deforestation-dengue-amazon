@@ -87,8 +87,8 @@ otimista, porque o modelo usa muitos parâmetros efetivos; compare modelos pelo 
 | Clusters Alto-Alto (LISA) | 2 regiões ao sul, 69 municípios | MT e AC, 52 municípios |
 
 O ΔAICc não depende da escala de y, por isso é a comparação mais robusta. O artigo não informa o núcleo nem o critério
-de banda; o gaussiano fixo por AICc foi o que melhor reproduziu seus números (o bisquare adaptativo do baseline dá R²
-ajustado de apenas 0,46).
+de banda; o gaussiano fixo por AICc foi o que melhor reproduziu seus números (o bisquare adaptativo, testado nas mesmas 4
+variáveis brutas, dá R² ajustado de apenas 0,44 pela fórmula do GWmodel).
 
 ### Diferenças em relação ao artigo
 
