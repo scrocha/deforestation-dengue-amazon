@@ -1,5 +1,6 @@
 import calendar
 import os
+import re
 import zipfile
 from datetime import date, timedelta
 from pathlib import Path
@@ -21,6 +22,8 @@ RAW_DIR.mkdir(exist_ok=True)
 GEOBR_RELEASE_URL = (
     "https://github.com/ipeaGIT/geobr/releases/download/v1.7.0/"
 )
+TERRABRASILIS_API = "https://terrabrasilis.dpi.inpe.br/business/api/v1/download/all"
+PRODES_LINK_REGEX = r"/amz-prodes/vector/prodes_biome_amazonia_v\d+\.gpkg\.zip$"
 DENGUE_KEY_COLUMNS = ("municipio_geocodigo", "SE", "Localidade_id")
 
 
@@ -367,11 +370,20 @@ def main():
     get_sicor_data()
 
     print("Baixando dados do PRODES...")
-    download_and_extract(
-        "https://terrabrasilis.dpi.inpe.br/download/dataset/amz-prodes/vector/prodes_biome_amazonia_v20260717.gpkg.zip",
-        "prodes_biome_amazonia_v20260717.gpkg.zip",
-        "prodes_biome_amazonia_v20260717.gpkg",
-    )
+    prodes_path = RAW_DIR / "prodes_biome_amazonia.gpkg"
+    if not prodes_path.exists():
+        # A versão (data) muda a cada atualização; pega a mais recente na API.
+        catalog = requests.get(TERRABRASILIS_API, timeout=60).json()
+        link = next(
+            d["link"] for d in catalog if re.search(PRODES_LINK_REGEX, d["link"])
+        )
+        name = Path(link).name
+        download_and_extract(
+            f"https://terrabrasilis.dpi.inpe.br{link}",
+            name,
+            name.removesuffix(".zip"),
+        )
+        (RAW_DIR / name.removesuffix(".zip")).rename(prodes_path)
 
     print("Baixando dados de precipitação...")
     precip_path = RAW_DIR / "precipitation_min_amzl.asc"

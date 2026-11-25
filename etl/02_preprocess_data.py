@@ -176,7 +176,7 @@ def process_precipitation(muni_gdf):
 def main():
     muni_gdf = load_base_municipalities()
     prodes = gpd.read_file(
-        RAW_DIR / "prodes_biome_amazonia_v20260717.gpkg",
+        RAW_DIR / "prodes_biome_amazonia.gpkg",
         layer="yearly_deforestation_biome",
     )
     prodes = prodes[prodes["year"].isin(TARGET_YEARS)]

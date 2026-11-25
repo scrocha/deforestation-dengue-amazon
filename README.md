@@ -54,7 +54,7 @@ Este repositório implementa um fluxo completo de:
 ## Dados utilizados
 
 - Dengue (InfoDengue/DATASUS): data/raw/dengue.csv
-- Desmatamento (PRODES/INPE): data/raw/prodes_biome_amazonia_v20260717.gpkg
+- Desmatamento (PRODES/INPE): data/raw/prodes_biome_amazonia.gpkg
 - Bioma e municípios (geobr/IBGE): data/raw/amazon.gpkg e data/raw/municipality.gpkg
 - PIB per capita (SIDRA tabela 5938): data/raw/pib.csv
 - População urbana/rural (SIDRA tabela 202): data/raw/populacao_situacao.csv
