@@ -103,8 +103,11 @@ menos de 1%, como Pium-TO e Luciara-MT). Retirá-los não muda nada: Moran 0,510
 
 **GWR.** O artigo usou R (GWmodel) sem informar kernel nem critério de banda. O núcleo gaussiano (ou exponencial)
 **fixo, com banda por AICc**, reproduz o artigo: Δ AICc de −437 (−430 no exponencial) contra −430, R² ajustado de
-0,74 contra 0,70, e os quartis dos coeficientes locais (Tabela 3) são próximos para desmatamento (Q1 −7,9 mil vs
-−7,0 mil; mediana 4,9 mil vs 4,1 mil), PIB per capita (mediana 1,79 vs 1,71) e intercepto (mediana 71 vs 82). O
+0,74 contra 0,70. Os coeficientes locais (Tabela 3) só são comparáveis na escala do artigo (taxa anual): a
+resposta daqui é a média das incidências semanais, então os coeficientes saem ~52 vezes menores. Com a soma anual, o
+intercepto tem mediana 80 (artigo 82) e o PIB per capita 1,50 (1,71); o desmatamento fica na mesma ordem de grandeza,
+mas com sinal e quartis diferentes (mediana −1,8 mil vs 4,1 mil; Q1 −29 mil vs −7,0 mil), e os créditos dependem da
+unidade usada pelo artigo, que não é informada. O
 bisquare adaptativo, usado no baseline, dá R² ajustado de 0,46. Por isso os cenários 3 e 4 usam GWR fixo gaussiano
 (`fit_gwr_fixed`); os cenários 1 e 2 mantêm o bisquare adaptativo.
 

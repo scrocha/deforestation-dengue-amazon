@@ -269,7 +269,7 @@ def run_paper(gdf, w, coords) -> dict:
     vifs = [variance_inflation_factor(sm.add_constant(X_raw), i) for i in range(1, X_raw.shape[1] + 1)]
     pd.DataFrame(
         {
-            "Name": ["Intercept"] + ["Average GDP per capita" if n == "gdp_capita" else n for n in cols],
+            "Name": ["Intercept"] + ["Average GDP per capita" if c == "gdp_capita" else c for c in cols],
             "Estimate": ols_raw.betas.flatten(),
             "Std.Err": ols_raw.std_err.flatten(),
             "VIF": ["-"] + [round(v, 2) for v in vifs],
