@@ -32,28 +32,31 @@ def process_dengue():
     return dengue
 
 
-def process_deforestation(muni_gdf, prodes):
-    prodes = prodes.to_crs(muni_gdf.crs)
-    joined = gpd.sjoin(prodes, muni_gdf[["code_muni", "geometry"]], predicate="within")
+def locate_deforestation(muni_gdf, prodes):
+    """Associa cada polígono do PRODES ao município que o contém (uma única junção espacial)."""
+    return gpd.sjoin(prodes, muni_gdf[["code_muni", "geometry"]], predicate="within")
+
+
+def process_deforestation(joined):
     annual_sum = joined.groupby(["code_muni", "year"])["area_km"].sum().reset_index()
     return (
         annual_sum.groupby("code_muni")["area_km"].mean().reset_index().rename(columns={"area_km": "avg_deforestation"})
     )
 
 
-def process_road_distance(muni_gdf, prodes):
+def process_road_distance(joined):
+    """Distância média (km) do centroide de cada polígono desmatado à rodovia mais próxima."""
     roads = gpd.read_file(RAW_DIR / "2014" / "rodovia_2014.shp")
     if roads.crs is None:
         roads = roads.set_crs("EPSG:4674")
     roads = roads.to_crs("EPSG:5880")
 
-    def_recent = prodes.to_crs("EPSG:5880")
-    def_recent["centroid"] = def_recent.geometry.centroid
-
-    joined = gpd.sjoin(def_recent, muni_gdf[["code_muni", "geometry"]].to_crs("EPSG:5880"), predicate="within")
-    road_union = roads.geometry.union_all()
-    joined["dist"] = joined["centroid"].distance(road_union) / 1000
-    return joined.groupby("code_muni")["dist"].mean().reset_index().rename(columns={"dist": "dist_roads"})
+    projected = joined[["code_muni", "geometry"]].reset_index(drop=True).to_crs("EPSG:5880")
+    points = gpd.GeoDataFrame({"code_muni": projected["code_muni"]}, geometry=projected.centroid, crs="EPSG:5880")
+    nearest = points.sjoin_nearest(roads[["geometry"]], distance_col="dist")
+    nearest = nearest[~nearest.index.duplicated()]
+    nearest["dist"] /= 1000
+    return nearest.groupby("code_muni")["dist"].mean().reset_index().rename(columns={"dist": "dist_roads"})
 
 
 def process_socioeconomics():
@@ -148,12 +151,17 @@ def process_precipitation(muni_gdf):
 
 def main():
     muni_gdf = load_base_municipalities()
-    prodes = gpd.read_file(RAW_DIR / "prodes_biome_amazonia.gpkg", layer="yearly_deforestation_biome")
-    prodes = prodes[prodes["year"].isin(TARGET_YEARS)]
+    prodes = gpd.read_file(
+        RAW_DIR / "prodes_biome_amazonia.gpkg",
+        layer="yearly_deforestation_biome",
+        columns=["year", "area_km"],
+        where=f"year IN ({', '.join(map(str, TARGET_YEARS))})",
+    ).to_crs(muni_gdf.crs)
+    joined = locate_deforestation(muni_gdf, prodes)
     data = (
         muni_gdf.merge(process_dengue(), on="code_muni", how="left")
-        .merge(process_deforestation(muni_gdf, prodes), on="code_muni", how="left")
-        .merge(process_road_distance(muni_gdf, prodes), on="code_muni", how="left")
+        .merge(process_deforestation(joined), on="code_muni", how="left")
+        .merge(process_road_distance(joined), on="code_muni", how="left")
         .merge(process_socioeconomics(), on="code_muni", how="left")
         .merge(process_crops(), on="code_muni", how="left")
         .merge(process_sicor_credit(), on="code_muni", how="left")
