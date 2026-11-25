@@ -6,6 +6,7 @@ Pipeline de reprodução do estudo sobre a relação entre desmatamento e incid�
 
 - Silva et al. (2023). Deforestation impacts on dengue incidence in the Brazilian Amazon. Environmental Monitoring and Assessment, 195:593.
 - DOI: https://doi.org/10.1007/s10661-023-11174-0
+- Cópia local (acesso pago, fora do git): `references/silva_2023_deforestation_dengue.pdf`
 
 ## Objetivo do projeto
 
@@ -66,37 +67,54 @@ Este repositório implementa um fluxo completo de:
 
 ### Preditores do baseline (9)
 
-- `avg_deforestation`: média anual de área desmatada (km²).
-- `dist_roads`: distância média entre áreas desmatadas e rodovias (km).
+- `avg_deforestation`: média anual de área desmatada (km²). Cada polígono do PRODES é atribuído ao município do seu centroide.
+- `dist_roads`: distância média entre áreas desmatadas e rodovias (km). Ausente (imputada pela mediana nos modelos) em municípios sem desmatamento.
 - `average_min_precipitation`: precipitação média mínima no mês mais seco.
-- `gdp_capita`: PIB per capita.
+- `gdp_capita`: PIB per capita (R$ mil por habitante) = PIB total (SIDRA 5938, mil R$) / população estimada.
 - `std_rural_pop`: população rural padronizada por km².
 - `std_urban_pop`: população urbana padronizada por km².
 - `std_agri_credit`: crédito agrícola padronizado por km².
 - `std_live_credit`: crédito pecuário padronizado por km².
 - `std_crop_area`: área de lavoura temporária padronizada por km².
 
-### Preditores da reprodução do paper (4)
+### Preditores da reprodução do paper (4), Tabela 1 do artigo
 
-- `avg_deforestation`: +0.0191
-- `std_agri_credit`: +0.3213
-- `std_live_credit`: +0.0768
-- `Average log GDP per capita`: +0.6621
+- `std_deforestation`: desmatamento médio anual (km²) padronizado pela área do município.
+- `std_agri_credit` e `std_live_credit`: crédito rural agrícola e pecuário por km².
+- `gdp_capita`: PIB per capita (sem log, como na Tabela 2 do artigo).
 
-## Métricas principais salvas no repositório
+## Comparação com o artigo (Silva et al., 2023)
 
-- Moran global (dengue): I = 0.5307, p = 0.001 (data/results/moran_metrics.json)
-- OLS baseline: R² = 0.156, AIC = 4154.6 (data/results/ols_metrics.json)
-- GWR baseline: R² = 0.488, AIC = 3972.7 (data/results/gwr_metrics.json)
+| Item | Artigo | Este repositório |
+|---|---|---|
+| Municípios | 550 totalmente dentro do bioma | 560 que intersectam o bioma (geobr 2021) |
+| Resposta | taxa média de dengue por 100 mil (DATASUS/Sinan) | média das incidências semanais (InfoDengue) |
+| Moran global (dengue) | 0,532 | 0,510 |
+| Moran dos resíduos do OLS | 0,359 | 0,366 (resposta anual) / 0,379 |
+| OLS (4 variáveis, escala bruta) R² | 0,20 | 0,186 (ajustado 0,180) |
+| VIF das 4 variáveis | 1,006 / 1,621 / 1,111 / 1,583 | 1,01 / 1,33 / 1,02 / 1,32 |
+| GWR R² (ajustado, segundo o resumo) | 0,70 (AIC 7519) | 0,513 (ajustado 0,458) com bisquare adaptativo e AICc |
+| Clusters Alto-Alto | dois, no sul do bioma (69 municípios) | MT e AC (50 municípios) |
 
-Comparação consolidada (data/results/10_final_model_comparison.csv):
+O OLS e a autocorrelação reproduzem bem. O GWR não reproduz o R² de 0,70: o artigo usou R (GWmodel) sem
+informar kernel nem critério de banda. Em testes com a especificação do artigo, o núcleo gaussiano fixo dá
+R² ajustado de 0,58 (CV) a 0,77 (AICc), o bisquare adaptativo 0,46 a 0,49, ou seja, o resultado depende
+da escolha da banda. Os AIC não são comparáveis porque a escala da resposta difere.
+
+## Métricas principais (execução atual)
+
+- Moran global (dengue): I = 0,510, p = 0,001 (`data/results/moran_metrics.json`)
+- OLS baseline (9 variáveis): R² = 0,179, AIC = 4145,9
+- GWR baseline: R² = 0,506, AIC = 3963,7
+
+Comparação consolidada (`data/results/10_final_model_comparison.csv`):
 
 | Iteração | Variáveis | Transformações | OLS R² | OLS AIC | GWR R² | GWR AIC |
 |---|---:|---|---:|---:|---:|---:|
-| 1. Baseline | 9 | Nenhuma (Raw) | 0.156 | 4154.6 | 0.488 | 3972.7 |
-| 2. Transformado Otimizado | 9 | Log1p(y) e Log1p/Norm(X) | 0.429 | 1375.7 | 0.646 | 1213.1 |
-| 3. Reprodução Paper (Original) | 4 | Nenhuma (Escala Raw) | 0.143 | 4153.1 | 0.555 | 3916.0 |
-| 4. Reprodução Paper (Transf) | 4 | Log1p(y) e Z-Score(X) | 0.220 | 1540.3 | 0.658 | 1216.6 |
+| 1. Baseline | 9 | Nenhuma (Raw) | 0,179 | 4145,9 | 0,506 | 3963,7 |
+| 2. Transformado Otimizado | 9 | Log1p(y) e Log1p/Norm(X) | 0,466 | 1340,5 | 0,656 | 1207,9 |
+| 3. Reprodução Paper (Original) | 4 | Nenhuma (Escala Raw) | 0,186 | 4130,8 | 0,513 | 3948,6 |
+| 4. Reprodução Paper (Transf) | 4 | Log1p(y) e Z-Score(X) | 0,266 | 1508,5 | 0,612 | 1257,2 |
 
 ## Figuras relevantes
 

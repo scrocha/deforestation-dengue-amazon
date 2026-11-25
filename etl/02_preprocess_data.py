@@ -33,8 +33,15 @@ def process_dengue():
 
 
 def locate_deforestation(muni_gdf, prodes):
-    """Associa cada polígono do PRODES ao município que o contém (uma única junção espacial)."""
-    return gpd.sjoin(prodes, muni_gdf[["code_muni", "geometry"]], predicate="within")
+    """Atribui cada polígono do PRODES a um único município, o que contém seu centroide.
+
+    `within` descartava polígonos que cruzam divisas e contava em dobro os que caem na sobreposição
+    das geometrias simplificadas (58,3 mil km² contra 54,0 mil km² no PRODES).
+    """
+    points = prodes.copy()
+    points["geometry"] = prodes.to_crs("EPSG:5880").centroid.to_crs(muni_gdf.crs)
+    joined = gpd.sjoin(points, muni_gdf[["code_muni", "geometry"]], predicate="within")
+    return joined[~joined.index.duplicated()]
 
 
 def process_deforestation(joined):
@@ -45,14 +52,13 @@ def process_deforestation(joined):
 
 
 def process_road_distance(joined):
-    """Distância média (km) do centroide de cada polígono desmatado à rodovia mais próxima."""
+    """Distância média (km) do centroide de cada polígono desmatado à rodovia mais próxima (`joined` já tem centroides)."""
     roads = gpd.read_file(RAW_DIR / "2014" / "rodovia_2014.shp")
     if roads.crs is None:
         roads = roads.set_crs("EPSG:4674")
     roads = roads.to_crs("EPSG:5880")
 
-    projected = joined[["code_muni", "geometry"]].reset_index(drop=True).to_crs("EPSG:5880")
-    points = gpd.GeoDataFrame({"code_muni": projected["code_muni"]}, geometry=projected.centroid, crs="EPSG:5880")
+    points = joined[["code_muni", "geometry"]].reset_index(drop=True).to_crs("EPSG:5880")
     nearest = points.sjoin_nearest(roads[["geometry"]], distance_col="dist")
     nearest = nearest[~nearest.index.duplicated()]
     nearest["dist"] /= 1000
@@ -67,7 +73,7 @@ def process_socioeconomics():
         .groupby("Município (Código)")["Valor"]
         .mean()
         .reset_index()
-        .rename(columns={"Valor": "gdp_capita"})
+        .rename(columns={"Valor": "gdp_total_thousand"})
     )
 
     pop_legacy = pd.read_csv(RAW_DIR / "populacao_situacao.csv")
@@ -166,7 +172,14 @@ def main():
         .merge(process_crops(), on="code_muni", how="left")
         .merge(process_sicor_credit(), on="code_muni", how="left")
         .merge(process_precipitation(muni_gdf), on="code_muni", how="left")
-    ).fillna(0)
+    )
+    # Sem desmatamento a distância às rodovias é indefinida (não 0 km): fica ausente e os modelos imputam.
+    dist_roads = data["dist_roads"]
+    data = data.fillna(0)
+    data["dist_roads"] = dist_roads
+    # PIB (SIDRA 5938, variável 37) vem em mil reais: PIB per capita (R$ mil por habitante, unidade da Tabela 1
+    # do artigo) = PIB total / população estimada.
+    data["gdp_capita"] = data["gdp_total_thousand"] / data["population_estimated"]
 
     std_columns = {
         "std_deforestation": "avg_deforestation",

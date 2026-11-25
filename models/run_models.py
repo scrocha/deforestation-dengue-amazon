@@ -32,7 +32,8 @@ PRED_COLS = [
     "std_rural_pop", "std_urban_pop", "std_agri_credit", "std_live_credit",
     "std_crop_area",
 ]  # fmt: skip
-PAPER_COLS = ["avg_deforestation", "std_agri_credit", "std_live_credit", "gdp_capita"]
+PAPER_COLS = ["std_deforestation", "std_agri_credit", "std_live_credit", "gdp_capita"]  # Tabela 1 do artigo
+RNG = np.random.default_rng(42)  # ruído mínimo contra colinearidade exata; fixo para reprodutibilidade
 LISA_COLORS = {0: "lightgrey", 1: "red", 2: "lightblue", 3: "blue", 4: "pink"}
 LISA_LABELS = {
     0: "Não Significativo",
@@ -122,6 +123,7 @@ def run_ols(gdf, w) -> dict:
     (RESULTS_DIR / "ols_summary.txt").write_text(ols.summary)
     metrics = {
         "ols_r2": float(ols.r2),
+        "ols_adj_r2": float(ols.ar2),
         "ols_aic": float(ols.aic),
         "ols_residual_moran_i": float(mi.I),
         "ols_residual_moran_p": float(mi.p_sim),
@@ -145,7 +147,12 @@ def run_gwr(gdf, coords) -> dict:
         gdf[f"tvalue_{name}"] = results.tvalues[:, i]
         gdf[f"pvalue_{name}"] = pvals[:, i]
 
-    metrics = {"gwr_r2": float(results.R2), "gwr_aic": float(results.aic), "gwr_bw": float(bw)}
+    metrics = {
+        "gwr_r2": float(results.R2),
+        "gwr_adj_r2": float(results.adj_R2),
+        "gwr_aic": float(results.aic),
+        "gwr_bw": float(bw),
+    }
     save_json(metrics, "gwr_metrics.json")
     return metrics
 
@@ -182,7 +189,7 @@ def run_transformed(gdf, w, coords, gwr_r2: float) -> dict:
     y = np.log1p(gdf["dengue_incidence"].values).reshape(-1, 1)
     X_log = np.log1p(np.maximum(gdf[PRED_COLS].values, 0))
     X = zscore(X_log, 1e-9)
-    X += np.random.normal(0, 1e-10, X.shape)
+    X += RNG.normal(0, 1e-10, X.shape)
 
     norm_df = pd.DataFrame(X, columns=PRED_COLS).assign(dengue_incidence_log=y.flatten())
     fig, ax = plt.subplots(figsize=(11, 9))
@@ -214,6 +221,7 @@ def run_transformed(gdf, w, coords, gwr_r2: float) -> dict:
         "ols_trans_r2": float(ols.r2),
         "ols_trans_aic": float(ols.aic),
         "gwr_trans_r2": float(results.R2),
+        "gwr_trans_adj_r2": float(results.adj_R2),
         "gwr_trans_aic": float(results.aic),
         "gwr_trans_bw": float(bw),
     }
@@ -223,11 +231,11 @@ def run_transformed(gdf, w, coords, gwr_r2: float) -> dict:
 
 def run_paper(gdf, w, coords) -> dict:
     """Reprodução do artigo: 4 variáveis, versões transformada e bruta."""
-    cols = with_gdp_log(PAPER_COLS)
+    cols = PAPER_COLS  # como na Tabela 2 do artigo: PIB per capita sem log
     X_raw = gdf[cols].values.astype(float)
     y_raw = gdf["dengue_incidence"].values.astype(float).reshape(-1, 1)
     X_std = zscore(X_raw, 1e-9)
-    X_std += np.random.normal(0, 1e-10, X_std.shape)
+    X_std += RNG.normal(0, 1e-10, X_std.shape)
     y_trans = np.log1p(y_raw)
 
     ols_trans = OLS(y_trans, X_std, w=w, name_y="dengue", name_x=cols)
@@ -238,7 +246,7 @@ def run_paper(gdf, w, coords) -> dict:
     vifs = [variance_inflation_factor(sm.add_constant(X_raw), i) for i in range(1, X_raw.shape[1] + 1)]
     pd.DataFrame(
         {
-            "Name": ["Intercept"] + ["Average log GDP per capita" if n == "log_gdp_capita" else n for n in cols],
+            "Name": ["Intercept"] + ["Average GDP per capita" if n == "gdp_capita" else n for n in cols],
             "Estimate": ols_raw.betas.flatten(),
             "Std.Err": ols_raw.std_err.flatten(),
             "VIF": ["-"] + [round(v, 2) for v in vifs],
@@ -250,10 +258,13 @@ def run_paper(gdf, w, coords) -> dict:
         "ols_paper_r2": float(ols_trans.r2),
         "ols_paper_aic": float(ols_trans.aic),
         "gwr_paper_r2": float(res_trans.R2),
+        "gwr_paper_adj_r2": float(res_trans.adj_R2),
         "gwr_paper_aic": float(res_trans.aic),
         "ols_raw_paper_r2": float(ols_raw.r2),
         "ols_raw_paper_aic": float(ols_raw.aic),
         "gwr_raw_paper_r2": float(res_raw.R2),
+        "gwr_raw_paper_adj_r2": float(res_raw.adj_R2),
+        "ols_raw_paper_adj_r2": float(ols_raw.ar2),
         "gwr_raw_paper_aic": float(res_raw.aic),
     }
     save_json(metrics, "paper_metrics.json")
@@ -264,7 +275,7 @@ def run_hierarchical(gdf) -> dict:
     """MixedLM por estado e OLS com dummies de estado, nos quatro cenários."""
     gdf["y_raw"] = gdf["dengue_incidence"]
     gdf["y_trans"] = np.log1p(gdf["dengue_incidence"])
-    for col in PRED_COLS:
+    for col in dict.fromkeys(PRED_COLS + PAPER_COLS):
         gdf[f"std_{col}"] = zscore(np.log1p(np.maximum(gdf[col].values, 0)), 1e-9)
     trans = [f"std_{c}" for c in PRED_COLS]
     scenarios = {
@@ -337,6 +348,8 @@ def main() -> None:
     RESULTS_DIR.mkdir(exist_ok=True)
     FIGURES_DIR.mkdir(exist_ok=True)
     gdf = gpd.read_file(DATA_PATH)
+    # Municípios sem desmatamento não têm distância às rodovias: usa a mediana (só afeta os cenários de 9 variáveis).
+    gdf["dist_roads"] = gdf["dist_roads"].fillna(gdf["dist_roads"].median())
     gdf["log_gdp_capita"] = np.log1p(gdf["gdp_capita"])
     w = libpysal.weights.Queen.from_dataframe(gdf, use_index=False)
     w.transform = "r"
