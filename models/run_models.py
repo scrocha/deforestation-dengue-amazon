@@ -364,12 +364,12 @@ def print_summary(moran: dict, metrics: dict[str, dict], hierarchical: dict) -> 
     print(f"Moran global dengue: {moran['global_moran_i']:.3f} (p={moran['global_moran_p']:.3f})\n")
     ols, gwr, trans, paper = (metrics[k] for k in ("ols", "gwr", "trans", "paper"))
     scenarios = [
-        ("1. Baseline (Raw)", 9, "raw_9", ols["ols_r2"], ols["ols_aic"], gwr["gwr_r2"], gwr["gwr_aic"]),
-        ("2. Transformado Otimizado", 9, "trans_9", trans["ols_trans_r2"], trans["ols_trans_aic"],
+        ("A. 9 vars, original", 9, "raw_9", ols["ols_r2"], ols["ols_aic"], gwr["gwr_r2"], gwr["gwr_aic"]),
+        ("B. 9 vars, log1p + z-score", 9, "trans_9", trans["ols_trans_r2"], trans["ols_trans_aic"],
          trans["gwr_trans_r2"], trans["gwr_trans_aic"]),
-        ("3. Paper (Raw, GWR fixo)", 4, "raw_4", paper["ols_raw_paper_r2"], paper["ols_raw_paper_aic"],
+        ("C. 4 vars (artigo), original", 4, "raw_4", paper["ols_raw_paper_r2"], paper["ols_raw_paper_aic"],
          paper["gwr_raw_paper_r2"], paper["gwr_raw_paper_aic"]),
-        ("4. Paper (Transf, GWR fixo)", 4, "trans_4", paper["ols_paper_r2"], paper["ols_paper_aic"],
+        ("D. 4 vars (artigo), y log1p + X z-score", 4, "trans_4", paper["ols_paper_r2"], paper["ols_paper_aic"],
          paper["gwr_paper_r2"], paper["gwr_paper_aic"]),
     ]  # fmt: skip
     rows = []
@@ -377,12 +377,12 @@ def print_summary(moran: dict, metrics: dict[str, dict], hierarchical: dict) -> 
         h = hierarchical[key]
         rows.append(
             {
-                "Iteração": label,
+                "Cenário": label,
                 "Vars": n_vars,
                 "OLS R² (AIC)": fmt(ols_r2, ols_aic),
-                "Hier (Muni) R² (AIC)": fmt(h["muni_r2"], h["muni_aic"]),
-                "Hier (Est.) R² (AIC)": fmt(h["state_r2"], h["state_aic"]),
-                "GWR R² (AIC)": fmt(gwr_r2, gwr_aic),
+                "OLS + efeito fixo de UF R² (AIC)": fmt(h["muni_r2"], h["muni_aic"]),
+                "Misto por UF R² (AIC)": fmt(h["state_r2"], h["state_aic"]),
+                "GWR (A,B adaptativo; C,D fixo) R² (AIC)": fmt(gwr_r2, gwr_aic),
             }
         )
     table = pd.DataFrame(rows)
