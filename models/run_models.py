@@ -18,7 +18,7 @@ import statsmodels.api as sm
 import statsmodels.formula.api as smf
 from esda.moran import Moran, Moran_Local
 from mgwr.gwr import GWR
-from mgwr.sel_bw import Sel_BW
+from mgwr.search import golden_section
 from scipy.stats import norm
 from spreg import OLS
 from statsmodels.stats.outliers_influence import variance_inflation_factor
@@ -52,9 +52,27 @@ def zscore(x: np.ndarray, eps: float = 0.0) -> np.ndarray:
     return (x - x.mean(axis=0)) / (x.std(axis=0) + eps)
 
 
+def gwr_aicc(coords: np.ndarray, y: np.ndarray, X: np.ndarray, bw: int) -> float:
+    """AICc do GWR gaussiano (bisquare adaptativo, com intercepto), em lote; igual ao do mgwr sem a inferência."""
+    n, y = len(y), y.reshape(-1)
+    xd = np.column_stack([np.ones(n), X])
+    p = xd.shape[1]
+    dist = np.sqrt(((coords[:, None, :] - coords[None, :, :]) ** 2).sum(axis=2))
+    h = np.partition(dist, bw - 1, axis=1)[:, bw - 1, None] * 1.0000001
+    w = np.where(dist < h, (1 - (dist / h) ** 2) ** 2, 0.0)
+    outer = (xd[:, :, None] * xd[:, None, :]).reshape(n, p * p)
+    sol = np.linalg.solve((w @ outer).reshape(n, p, p), np.stack([w @ (xd * y[:, None]), xd], axis=2))
+    resid = y - np.einsum("ij,ij->i", xd, sol[:, :, 0])
+    tr_s = np.einsum("ij,ij->i", xd, sol[:, :, 1]).sum()
+    llf = -0.5 * n * (np.log(2 * np.pi) + np.log(resid @ resid / n) + 1)
+    return float(-2 * llf + 2 * n * (tr_s + 1) / (n - tr_s - 2))
+
+
 def fit_gwr(coords: np.ndarray, y: np.ndarray, X: np.ndarray):
-    """GWR bisquare adaptativo com banda escolhida por AICc."""
-    bw = Sel_BW(coords, y, X, kernel="bisquare", fixed=False).search(criterion="AICc")
+    """GWR bisquare adaptativo com banda escolhida por AICc (seção áurea do mgwr, AICc em lote)."""
+    bw = golden_section(
+        40 + 2 * (X.shape[1] + 1), len(y), 0.38197, lambda b: gwr_aicc(coords, y, X, int(b)), 1e-6, 200, None, True
+    )[0]
     return bw, GWR(coords, y, X, bw, kernel="bisquare", fixed=False).fit()
 
 
