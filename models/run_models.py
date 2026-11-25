@@ -250,6 +250,24 @@ def run_transformed(gdf, w, coords, gwr_r2: float) -> dict:
     return metrics
 
 
+def plot_paper_gwr(gdf, results) -> None:
+    """R² local e coeficientes locais (desmatamento, PIB per capita) do GWR fixo da reprodução do artigo."""
+    panels = {
+        "R² local": results.localR2,
+        "Coeficiente do desmatamento": results.params[:, 1],
+        "Coeficiente do PIB per capita": results.params[:, 4],
+    }
+    fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+    for ax, (title, values) in zip(axes, panels.items()):
+        gdf["_v"] = values
+        lo, hi = np.percentile(values, [5, 95])  # corta os extremos para a escala não ser dominada por outliers
+        plot_map(gdf, "_v", ax, "YlOrBr" if title == "R² local" else "RdBu_r", vmin=lo, vmax=hi)
+        ax.set_title(title)
+        ax.axis("off")
+    gdf.drop(columns="_v", inplace=True)
+    save_fig(fig, "12_paper_gwr_local.png")
+
+
 def run_paper(gdf, w, coords) -> dict:
     """Reprodução do artigo: 4 variáveis, versões transformada e bruta, GWR gaussiano fixo (AICc)."""
     cols = PAPER_COLS  # como na Tabela 2 do artigo: PIB per capita sem log
@@ -276,6 +294,7 @@ def run_paper(gdf, w, coords) -> dict:
         }
     ).to_csv(RESULTS_DIR / "paper_table2_ols.csv", index=False)
     pd.DataFrame(res_raw.params, columns=["Intercept", *cols]).describe().T.to_csv(RESULTS_DIR / "paper_table3_gwr.csv")
+    plot_paper_gwr(gdf, res_raw)
 
     metrics = {
         "ols_paper_r2": float(ols_trans.r2),
