@@ -97,6 +97,10 @@ Este repositório implementa um fluxo completo de:
 | GWR: R² ajustado (fórmula do GWmodel) | 0,70 | 0,741 (R² global 0,839; banda 103 km) |
 | Clusters Alto-Alto | dois, no sul do bioma (69 municípios) | MT e AC (50 municípios) |
 
+**Os 10 municípios a mais (560 vs 550).** São os de menor fração dentro do bioma (todos com menos de 2,2%; 9 com
+menos de 1%, como Pium-TO e Luciara-MT). Retirá-los não muda nada: Moran 0,510 nos dois casos, OLS R² 0,186 vs
+0,183, GWR fixo R² ajustado 0,741 vs 0,746 e Δ AICc −437 vs −434. Por isso a amostra de 560 foi mantida.
+
 **GWR.** O artigo usou R (GWmodel) sem informar kernel nem critério de banda. O núcleo gaussiano (ou exponencial)
 **fixo, com banda por AICc**, reproduz o artigo: Δ AICc de −437 (−430 no exponencial) contra −430, R² ajustado de
 0,74 contra 0,70, e os quartis dos coeficientes locais (Tabela 3) são próximos para desmatamento (Q1 −7,9 mil vs
